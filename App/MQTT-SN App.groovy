@@ -52,6 +52,16 @@ mappings {
 		PUT: "updateHumidity"
 		]
 	}
+	path("/power/:id/:power") {
+		action: [
+		PUT: "updatePower"
+		]
+	}
+	path("/energy/:id/:energy") {
+		action: [
+		PUT: "updateEnergy"
+		]
+	}
 	path("/:other/:id/:data") {
 		action: [
 		PUT: "other"
@@ -165,6 +175,58 @@ void updateStatus() {
 	} else {
 		def newStatus = addChildDevice("iholand", "General Switch",  id, null, [name: id, componentName: id, componentLabel: id])
 		newStatus.setStatus(on_off)
+	}
+}
+
+def updatePower() {
+	def id = params.id + "-pm"
+	def power = Float.parseFloat(params.power)
+
+	def powerMeter = getChildDevices().find{it.deviceNetworkId == id}
+
+	if (powerMeter != null) {
+
+		powerMeter.setPower(power)
+
+		if (powerMeter.displayName.contains("Flow")) {
+			if (logEnable) log.debug("${powerMeter.displayName} (${powerMeter.name}) = $power l/h - ${(power/60).round(2)} l/m")
+		} else {
+			if (logEnable) log.debug("${powerMeter.displayName} (${powerMeter.name}) = $power W")
+		}
+
+	} else {
+		def newPowerMeter = addChildDevice("iholand", "Power Meter",  id, null, [name: id, componentName: id, componentLabel: id])
+
+		newPowerMeter.setPower(power)
+		if (logEnable) log.debug("${newPowerMeter.name} = $power W")
+
+	}
+}
+
+def updateEnergy() {
+	def id = params.id + "-pm"
+	def power = Float.parseFloat(params.energy)
+
+	if (power == null) {
+		power = 0.0
+	}
+
+	if (logEnable) log.debug("Energy from sensor ${id}: ${power} kWh")
+
+	def powerMeter = getChildDevices().find{it.deviceNetworkId == id}
+
+	if (powerMeter != null) {
+
+		powerMeter.setEnergy(power)
+
+		if (logEnable) log.debug("${powerMeter.displayName} (${powerMeter.name}) = $power kWh")
+
+	} else {
+		def newPowerMeter = addChildDevice("iholand", "Power Meter",  id, null, [name: id, componentName: id, componentLabel: id])
+
+		newPowerMeter.setEnergy(power)
+		if (logEnable) log.debug("${newPowerMeter.name} = $power kWh")
+
 	}
 }
 
