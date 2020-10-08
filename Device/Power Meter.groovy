@@ -55,7 +55,7 @@ def setPower(power) {
 	log.debug "Executing 'setPower'";
 	// TODO: handle 'setTemperature' command
 
-	sendEvent(name: "power", value: power);
+	sendEvent(name: "power", value: power, unit: "W", isStateChange: true);
 }
 
 def setEnergy(energy) {
@@ -84,8 +84,8 @@ def setEnergy(energy) {
 
 	log.debug("Energy today: $state.energy_today")
 
-	sendEvent(name: "energy", value: energy_today.round(1))
-	sendEvent(name: "energy_total", value: energy)
+	sendEvent(name: "energy", value: energy_today.round(1), unit: "kWh", isStateChange: true)
+	sendEvent(name: "energy_total", value: energy, unit: "kWh", isStateChange: true)
 }
 
 def startNewDay() {
@@ -93,7 +93,7 @@ def startNewDay() {
 
 	def energy_today = state.energy_today.toFloat().round(1)
 
-	sendEvent(name: "energy_yesterday", value: energy_today)
+	sendEvent(name: "energy_yesterday", value: energy_today, unit: "kWh", isStateChange: true)
 
 	state.energy_to_today = state.energy_total
 
