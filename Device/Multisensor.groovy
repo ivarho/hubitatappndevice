@@ -5,6 +5,7 @@ metadata {
 		capability "Battery"
 		capability "Relative Humidity Measurement"
 		capability "Switch"
+		capability "PresenceSensor"
 
 		attribute "lastCheckin", "String"
 
@@ -92,6 +93,7 @@ def checked_in() {
 	sendEvent(name: "lastCheckin", value: timeString, displayed: false)
 
 	sendEvent(name: "battery", value: 100)
+	sendEvent(name: "presence", value: "present", isStateChange: true)
 
 	def timeout = 0
 
@@ -182,6 +184,7 @@ def timeoutHandler()
 	log.warn "Lost connection to sensor: $displayName"
 
 	sendEvent(name: "healthStatus", value: "offline")
+	sendEvent(name: "presence", value: "not present", isStateChange: true)
 
 	sendEvent(name: "battery", value: 5)
 
