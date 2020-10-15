@@ -47,6 +47,8 @@ def uninstalled() {
 def updated() {
 	log.debug "Updated with settings: ${settings}"
 
+	schedule("0 */10 * ? * *", contactHandlerClosed)
+
 	unsubscribe()
 	initialize()
 }
@@ -66,7 +68,7 @@ def initialize() {
 		log.debug "Child device not found, creating a new child"
 	}
 
-	chdevice.off()
+	chdevice.sendEvent(name: "contact", value: "closed")
 }
 
 def contactHandlerOpen(evt) {
