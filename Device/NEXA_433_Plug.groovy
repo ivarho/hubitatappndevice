@@ -41,7 +41,33 @@ def parse(String description) {
 	if (logEnable) log.debug(description)
 }
 
-def send_HTTP_get_status(Integer status)
+def handler(response, data) {
+	if (logEnable) log.debug "Handler executed with response: ${response.getStatus()}"
+
+	if (response.getStatus() == 200) {
+		unschedule(timeOut)
+
+		def json_data = response.getJson()
+
+		if (json_data['status'] == 1 || json_data['status'] == 3) {
+			sendEvent(name: "switch", value: "on", isStateChange: true)
+		} else {
+			sendEvent(name: "switch", value: "off", isStateChange: true)
+		}
+	}
+}
+
+def timeOut(data) {
+
+	if (data[1] == true) {
+		log.warn "Failed to get response from device: ${data}"
+		send_HTTP_get_status(data[0], false)
+	} else {
+		log.error "Failed to get response from device: ${data}"
+	}
+}
+
+def send_HTTP_get_status(Integer status, boolean retry = true)
 {
 	def NhubIP = "192.168.1.186"
 	def NhubPORT = "80"
@@ -61,28 +87,13 @@ def send_HTTP_get_status(Integer status)
 
 	URI = "http://$NhubIP:$NhubPORT/nexa.html?addr=$settings.address&ch=$settings.channel&status=$status"
 
-	try {
-		httpGet(URI) { resp ->
-			if (resp.success) {
-				if (status == 1) {
-					sendEvent(name: "switch", value: "on", isStateChange: true)
-				} else if (status == 0) {
-					sendEvent(name: "switch", value: "off", isStateChange: true)
-				} else if (status == 2) {
-					sendEvent(name: "switch", value: "off", isStateChange: true)
-					// Plus child devices
-				} else if (status == 3) {
-					sendEvent(name: "switch", value: "on", isStateChange: true)
-					// Plus child devices
-				}
+	def params = [
+            uri        : URI
+    ]
 
-			}
-			if (logEnable)
-				if (resp.data) log.debug "${resp.data}"
-		}
-	} catch (Exception e) {
-		log.warn "Call to on failed: ${e.message}"
-	}
+    asynchttpGet(handler, params)
+
+	runIn(1, timeOut, ["data": [status, retry]])
 
 	if (logEnable) log.debug("Sending URI: $URI")
 }
