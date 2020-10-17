@@ -3,7 +3,7 @@
  *
  */
 metadata {
-	definition(name: "tuya Device", namespace: "iholand", author: "iholand") {
+	definition(name: "tuya Generic Device", namespace: "iholand", author: "iholand") {
 		capability "Actuator"
 		capability "Switch"
 		capability "Sensor"
@@ -16,6 +16,7 @@ preferences {
 		input "devId", "text", title: "Device ID:", required: false
 		input "localKey", "text", title: "Device local key:", required: false
 		input name: "logEnable", type: "bool", title: "Enable debug logging", defaultValue: true
+		input "endpoint", "text", title: "End point to control: ", required: true
 	}
 }
 
@@ -28,6 +29,8 @@ def updated() {
 	log.info "updated..."
 	log.warn "debug logging is: ${logEnable == true}"
 	if (logEnable) runIn(1800, logsOff)
+
+	sendEvent(name: "switch", value: "off")
 }
 
 def parse(String description) {
@@ -101,31 +104,6 @@ def bin2hex(x) {
 	log.debug "Result: " + x.getBytes()
 }
 
-// Not working?
-def CRC32(bytes, length) {
-	crc  = 0xFFFFFFFF;       // initial contents of LFBSR
-	int poly = 0xEDB88320;   // reverse polynomial
-
-	for (i = 0; i < length; i++) {
-		b = Byte.toUnsignedInt(bytes[i])
-
-		int temp = (crc ^ b) & 0xff;
-
-		// read 8 bits one at a time
-			for (int i = 0; i < 8; i++) {
-				if ((temp & 1) == 1) temp = (temp >>> 1) ^ poly;
-				else                 temp = (temp >>> 1);
-			}
-			crc = (crc >>> 8) ^ temp;
-			log.debug Long.toHexString(~crc & 0xffffffff) + " - " + b
-		}
-
-		// flip bits
-		crc = crc ^ 0xffffffff;
-
-	return crc
-}
-
 def CRC32b(bytes, length) {
 	crc = 0xFFFFFFFF
 
@@ -141,6 +119,10 @@ def CRC32b(bytes, length) {
 	}
 
 	return ~crc
+}
+
+def generate_payload(command, data) {
+
 }
 
 
@@ -165,7 +147,7 @@ def on() {
 		json_data["t"] = "1602184793"
 	}
 
-	json_data["dps"] = ["104": true]
+	json_data["dps"] = ["${settings.endpoint}" : true]
 
 	json json_data
 
@@ -240,6 +222,13 @@ def on() {
 	//port 6668
 	def hubAction = new hubitat.device.HubAction(hubitat.helper.HexUtils.byteArrayToHexString(buf), hubitat.device.Protocol.LAN, [type: hubitat.device.HubAction.Type.LAN_TYPE_RAW, encoding: hubitat.device.HubAction.Encoding.HEX_STRING, destinationAddress: "$settings.ipaddress:6668"])
 	sendHubCommand(hubAction)
+
+	def response = hubAction.getAction()
+	def byteArray_response = hubitat.helper.HexUtils.hexStringToByteArray(response)
+
+	str_response = new String(byteArray_response, "UTF-8")
+
+	log.debug "Recived: ${str_response}"
 }
 
 def off() {
