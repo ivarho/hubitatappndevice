@@ -7,6 +7,8 @@ metadata {
 		capability "Actuator"
 		capability "Switch"
 		capability "Sensor"
+
+		command "status"
 	}
 }
 
@@ -36,6 +38,25 @@ def updated() {
 def parse(String description) {
 	if (logEnable) log.debug(description)
 	log.debug(description)
+	log.debug "Here"
+
+	byte[] msg_byte = hubitat.helper.HexUtils.hexStringToByteArray(description)
+
+	String status = new String(msg_byte, "ASCII")
+
+	status = status[20..-10]
+
+	def jsonSlurper = new groovy.json.JsonSlurper()
+	def status_object = jsonSlurper.parseText(status)
+
+
+	if (status_object.dps[endpoint] == true) {
+		sendEvent(name: "switch", value : "on", isStateChange : true)
+	} else {
+		sendEvent(name: "switch", value : "off", isStateChange : true)
+	}
+
+	interfaces.rawSocket.close()
 }
 
 def payload()
@@ -123,7 +144,7 @@ def CRC32b(bytes, length) {
 	return ~crc
 }
 
-def generate_payload(command, data) {
+def generate_payload(command, data=null) {
 
 	def json = new groovy.json.JsonBuilder()
 
@@ -144,7 +165,9 @@ def generate_payload(command, data) {
 		//json_data["t"] = "1602184793"
 	}
 
-	json_data["dps"] = data
+	if (data != null) {
+		json_data["dps"] = data
+	}
 
 	json json_data
 
@@ -156,19 +179,21 @@ def generate_payload(command, data) {
 
 	log.debug json_payload
 
-	encrypted_payload = encrypt(json_payload, settings.localKey)
+	if (command == "set") {
+		encrypted_payload = encrypt(json_payload, settings.localKey)
 
-	log.debug encrypted_payload
+		log.debug encrypted_payload
 
-	preMd5String = "data=" + encrypted_payload + "||lpv=" + "3.1" + "||" + settings.localKey
+		preMd5String = "data=" + encrypted_payload + "||lpv=" + "3.1" + "||" + settings.localKey
 
-	log.debug "preMd5String" + preMd5String
+		log.debug "preMd5String" + preMd5String
 
-	hexdigest = generateMD5(preMd5String)
+		hexdigest = generateMD5(preMd5String)
 
-	hexdig = new String(hexdigest[8..-9].getBytes("UTF-8"), "ISO-8859-1")
+		hexdig = new String(hexdigest[8..-9].getBytes("UTF-8"), "ISO-8859-1")
 
-	json_payload = "3.1" + hexdig + encrypted_payload
+		json_payload = "3.1" + hexdig + encrypted_payload
+	}
 
 	log.debug json_payload
 
@@ -194,19 +219,20 @@ def generate_payload(command, data) {
 	output = new ByteArrayOutputStream();
 
 	output.write(hubitat.helper.HexUtils.hexStringToByteArray(payload()["device"]["prefix"]))
-	output.write(hubitat.helper.HexUtils.hexStringToByteArray(payload()["device"]["set"]["hexByte"]))
+	output.write(hubitat.helper.HexUtils.hexStringToByteArray(payload()["device"][command]["hexByte"]))
 	output.write(hubitat.helper.HexUtils.hexStringToByteArray("000000"))
 	output.write(postfix_payload_hex_len)
 	output.write(postfix_payload)
 
-	byte[] buf = output.toByteArray();
-
-	log.debug hubitat.helper.HexUtils.byteArrayToHexString(buf)
+	byte[] buf = output.toByteArray()
 
 	crc32 = CRC32b(buf, buf.size()-8) & 0xffffffff
 	log.debug buf.size()
 
 	hex_crc = Long.toHexString(crc32)
+
+	log.debug "HEX crc: $hex_crc"
+
 	crc_bytes = hubitat.helper.HexUtils.hexStringToByteArray(hex_crc)
 
 	buf[buf.size()-8] = crc_bytes[0]
@@ -217,17 +243,35 @@ def generate_payload(command, data) {
 	return buf
 }
 
+import hubitat.device.HubAction
+import hubitat.device.Protocol
+
+def status() {
+	byte[] buf = generate_payload("status")
+
+	String msg = hubitat.helper.HexUtils.byteArrayToHexString(buf)
+
+	// Needed to use the rawSocket interface to get a response
+	interfaces.rawSocket.connect(settings.ipaddress, 6668, byteInterface: true, readDelay: 500)
+	interfaces.rawSocket.sendMessage(msg)
+}
+
 def on() {
+
+	sendEvent(name: "switch", value : "on", isStateChange : true)
 
 	def buf = generate_payload("set", ["${settings.endpoint}":true])
 
 	log.debug hubitat.helper.HexUtils.byteArrayToHexString(buf)
 
 	//port 6668
-	def hubAction = new hubitat.device.HubAction(hubitat.helper.HexUtils.byteArrayToHexString(buf), hubitat.device.Protocol.LAN, [type: hubitat.device.HubAction.Type.LAN_TYPE_RAW, encoding: hubitat.device.HubAction.Encoding.HEX_STRING, destinationAddress: "$settings.ipaddress:6668", timeout: 1 ])
-	sendHubCommand(hubAction)
+	//def hubAction = new hubitat.device.HubAction(hubitat.helper.HexUtils.byteArrayToHexString(buf), hubitat.device.Protocol.RAW_LAN, [type: hubitat.device.HubAction.Type.LAN_TYPE_RAW, encoding: hubitat.device.HubAction.Encoding.HEX_STRING, destinationAddress: "$settings.ipaddress:6668", timeout: 1])
+	//sendHubCommand(hubAction)
+
+	sendHubCommand(new HubAction(hubitat.helper.HexUtils.byteArrayToHexString(buf), Protocol.RAW_LAN, [destinationAddress: "$settings.ipaddress:6668", encoding: HubAction.Encoding.HEX_STRING, timeout: 1]))
 
 	// Check Status
+	runIn(2, status)
 }
 
 def off() {
