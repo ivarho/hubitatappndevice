@@ -79,6 +79,10 @@ def contactHandlerOpen(evt) {
 def contactHandlerClosed(evt) {
 	log.debug "ContactSensor state changed"
 
+	runInMillis(750, checkDoors)
+}
+
+def checkDoors() {
 	if (anyOpen(contactSensors)) {
 		turnOnChildDevice()
 	} else {
@@ -90,7 +94,7 @@ def anyOpen(doors) {
 	def anyOpenDoors = false
 
 	doors.each {door ->
-		log.debug door.name + ": " + door.currentValue("contact")
+		log.debug door.label + ": " + door.currentValue("contact")
 		if (door.currentValue("contact") == "open") {
 			anyOpenDoors = true
 		}
