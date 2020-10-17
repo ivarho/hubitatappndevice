@@ -44,19 +44,36 @@ def parse(String description) {
 
 	String status = new String(msg_byte, "ASCII")
 
-	status = status[20..-10]
+	status = status[20..-1]
 
-	def jsonSlurper = new groovy.json.JsonSlurper()
-	def status_object = jsonSlurper.parseText(status)
+	log.debug status
+
+	if (status.startsWith("{")) {
+
+		def jsonSlurper = new groovy.json.JsonSlurper()
+		def status_object = jsonSlurper.parseText(status)
 
 
-	if (status_object.dps[endpoint] == true) {
-		sendEvent(name: "switch", value : "on", isStateChange : true)
+		if (status_object.dps[endpoint] == true) {
+			sendEvent(name: "switch", value : "on", isStateChange : true)
+		} else {
+			sendEvent(name: "switch", value : "off", isStateChange : true)
+		}
 	} else {
-		sendEvent(name: "switch", value : "off", isStateChange : true)
+		// Does not work
+		status = status[24..-1]
+		status = status[3+16..-41]
+		log.debug "Encryted message: $status"
+
+		dec_status = decrypt(status, settings.localKey)
+		log.debug "Decryted message: ${dec_status.getBytes()}"
 	}
 
-	interfaces.rawSocket.close()
+	try {
+		interfaces.rawSocket.close()
+	} catch (e) {
+		log.error "Could not close socket: $e"
+	}
 }
 
 def payload()
@@ -171,7 +188,6 @@ def generate_payload(command, data=null) {
 
 	json json_data
 
-	log.debug "Sending on command"
 	json_payload = groovy.json.JsonOutput.toJson(json.toString())
 	json_payload = json_payload.replaceAll("\\\\", "")
 	json_payload = json_payload.replaceFirst("\"", "")
@@ -253,7 +269,12 @@ def status() {
 
 	// Needed to use the rawSocket interface to get a response
 	interfaces.rawSocket.connect(settings.ipaddress, 6668, byteInterface: true, readDelay: 500)
-	interfaces.rawSocket.sendMessage(msg)
+
+	try {
+		interfaces.rawSocket.sendMessage(msg)
+	} catch (e) {
+		log.error "Error $e"
+	}
 }
 
 def on() {
@@ -264,14 +285,14 @@ def on() {
 
 	log.debug hubitat.helper.HexUtils.byteArrayToHexString(buf)
 
-	//port 6668
-	//def hubAction = new hubitat.device.HubAction(hubitat.helper.HexUtils.byteArrayToHexString(buf), hubitat.device.Protocol.RAW_LAN, [type: hubitat.device.HubAction.Type.LAN_TYPE_RAW, encoding: hubitat.device.HubAction.Encoding.HEX_STRING, destinationAddress: "$settings.ipaddress:6668", timeout: 1])
-	//sendHubCommand(hubAction)
+	String msg = hubitat.helper.HexUtils.byteArrayToHexString(buf)
 
-	sendHubCommand(new HubAction(hubitat.helper.HexUtils.byteArrayToHexString(buf), Protocol.RAW_LAN, [destinationAddress: "$settings.ipaddress:6668", encoding: HubAction.Encoding.HEX_STRING, timeout: 1]))
+	//port 6668
+	interfaces.rawSocket.connect(settings.ipaddress, 6668, byteInterface: true, readDelay: 500)
+	interfaces.rawSocket.sendMessage(msg)
 
 	// Check Status
-	runIn(2, status)
+	runIn(1, status)
 }
 
 def off() {
