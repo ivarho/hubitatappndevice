@@ -35,6 +35,7 @@ def updated() {
 
 def parse(String description) {
 	if (logEnable) log.debug(description)
+	log.debug(description)
 }
 
 def payload()
@@ -71,40 +72,38 @@ def encrypt (def plainText, def secret) {
 	// even though that shouldn't work with S5Padding....
 	def cipher = Cipher.getInstance("AES/ECB/PKCS5Padding ")
 	SecretKeySpec key = new SecretKeySpec(secret.getBytes("UTF-8"), "AES")
-	// generate an Initial Vector using Random Number and no additional libraries....
-	// because they don't exist here....these are not the SecureRandom numbers you are looking for.....
-	def IVKey = Long.toUnsignedString(new Random().nextLong(), 16).toUpperCase()
-	IvParameterSpec iv = new IvParameterSpec(IVKey.getBytes("UTF-8"))
+
 	// initialize the encryption and get ready for that dirty dirty magic
 	cipher.init(Cipher.ENCRYPT_MODE, key)
 	// boom goes the dynamite
 	def result = cipher.doFinal(plainText.getBytes("UTF-8")).encodeBase64().toString()
-	// extract the Initial Vector and make it a string so we can pre-pend to the GoGoGate2
-	// encryption string.  Someone way smarter than me did it so I am doing it too...
-	// looking at you broadfoot..
-	//def ivString = cipher.getIV()
-	//ivString = new String(ivString, "UTF-8")
-	// prepend the IV to the Result and send it back....still needs to be URLEncoded etc......
-	// but we now have a valid payload.  Serioulsy...this was hard.....Python is WAY easier
-	// when it comes to some of this manipulation....but at least I didn't have to use a lambda.
-	//return ivString+result
+
 	return result
+}
+
+// undo the magic
+def decrypt (def cypherText, def secret) {
+	//log ("Decrypting - ${cypherText}","trace")
+	// this was so much easier to get done than the encryption.  It works.  Don't touch it
+	// cereal.  you will regret it.
+
+	// drop those beats..or bytes.
+	byte[] decodedBytes = cypherText.getBytes("UTF-8")
+	//log("decodedBytes:   ${decodedBytes}", "trace")
+	// no whammy no whammy no whammy.......
+	def cipher = Cipher.getInstance("AES/ECB/PKCS5Padding")
+	SecretKeySpec key = new SecretKeySpec(secret.getBytes("UTF-8"), "AES")
+	cipher.init(Cipher.DECRYPT_MODE, key)
+
+	log.debug decodedBytes.size()
+	//whammy!
+	return new String(cipher.doFinal(decodedBytes), "UTF-8")
 }
 
 import java.security.MessageDigest
 
 def generateMD5(String s){
 	MessageDigest.getInstance("MD5").digest(s.bytes).encodeHex().toString()
-}
-
-def bin2hex(x) {
-	result = ""
-
-	for (y in x) {
-		//result = result + y.encodeHex()
-	}
-
-	log.debug "Result: " + x.getBytes()
 }
 
 def CRC32b(bytes, length) {
@@ -141,11 +140,10 @@ def generate_payload(command, data) {
 	}
 	if (json_data.containsKey("t")) {
 		Date now = new Date()
-		//json_data["t"] = (now.getTime()/1000).toInteger()
-		json_data["t"] = "1602184793"
+		json_data["t"] = (now.getTime()/1000).toInteger()
+		//json_data["t"] = "1602184793"
 	}
 
-	//json_data["dps"] = ["${settings.endpoint}" : true]
 	json_data["dps"] = data
 
 	json json_data
@@ -219,7 +217,6 @@ def generate_payload(command, data) {
 	return buf
 }
 
-
 def on() {
 
 	def buf = generate_payload("set", ["${settings.endpoint}":true])
@@ -227,15 +224,10 @@ def on() {
 	log.debug hubitat.helper.HexUtils.byteArrayToHexString(buf)
 
 	//port 6668
-	def hubAction = new hubitat.device.HubAction(hubitat.helper.HexUtils.byteArrayToHexString(buf), hubitat.device.Protocol.LAN, [type: hubitat.device.HubAction.Type.LAN_TYPE_RAW, encoding: hubitat.device.HubAction.Encoding.HEX_STRING, destinationAddress: "$settings.ipaddress:6668", ignoreResponse: false, timeout: 1])
+	def hubAction = new hubitat.device.HubAction(hubitat.helper.HexUtils.byteArrayToHexString(buf), hubitat.device.Protocol.LAN, [type: hubitat.device.HubAction.Type.LAN_TYPE_RAW, encoding: hubitat.device.HubAction.Encoding.HEX_STRING, destinationAddress: "$settings.ipaddress:6668", timeout: 1 ])
 	sendHubCommand(hubAction)
 
-	def response = hubAction.getAction()
-	def byteArray_response = hubitat.helper.HexUtils.hexStringToByteArray(response)
-
-	str_response = new String(byteArray_response, "UTF-8")
-
-	log.debug "Recived: ${str_response}"
+	// Check Status
 }
 
 def off() {
