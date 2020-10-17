@@ -57,6 +57,9 @@ def payload()
 	return payload_dict
 }
 
+// Huge thank you to MrYutz for posting Groovy AES ecryption drivers for groovy
+//https://community.hubitat.com/t/groovy-aes-encryption-driver/31556
+
 import javax.crypto.spec.SecretKeySpec;
 import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.Cipher
