@@ -123,14 +123,9 @@ def CRC32b(bytes, length) {
 
 def generate_payload(command, data) {
 
-}
-
-
-def on() {
-
 	def json = new groovy.json.JsonBuilder()
 
-	json_data = payload()["device"]["set"]["command"]
+	json_data = payload()["device"][command]["command"]
 
 	if (json_data.containsKey("gwId")) {
 		json_data["gwId"] = settings.devId
@@ -147,7 +142,8 @@ def on() {
 		json_data["t"] = "1602184793"
 	}
 
-	json_data["dps"] = ["${settings.endpoint}" : true]
+	//json_data["dps"] = ["${settings.endpoint}" : true]
+	json_data["dps"] = data
 
 	json json_data
 
@@ -217,10 +213,18 @@ def on() {
 	buf[buf.size()-6] = crc_bytes[2]
 	buf[buf.size()-5] = crc_bytes[3]
 
+	return buf
+}
+
+
+def on() {
+
+	def buf = generate_payload("set", ["${settings.endpoint}":true])
+
 	log.debug hubitat.helper.HexUtils.byteArrayToHexString(buf)
 
 	//port 6668
-	def hubAction = new hubitat.device.HubAction(hubitat.helper.HexUtils.byteArrayToHexString(buf), hubitat.device.Protocol.LAN, [type: hubitat.device.HubAction.Type.LAN_TYPE_RAW, encoding: hubitat.device.HubAction.Encoding.HEX_STRING, destinationAddress: "$settings.ipaddress:6668"])
+	def hubAction = new hubitat.device.HubAction(hubitat.helper.HexUtils.byteArrayToHexString(buf), hubitat.device.Protocol.LAN, [type: hubitat.device.HubAction.Type.LAN_TYPE_RAW, encoding: hubitat.device.HubAction.Encoding.HEX_STRING, destinationAddress: "$settings.ipaddress:6668", ignoreResponse: false, timeout: 1])
 	sendHubCommand(hubAction)
 
 	def response = hubAction.getAction()
