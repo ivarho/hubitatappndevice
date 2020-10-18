@@ -37,8 +37,8 @@ def updated() {
 
 def parse(String description) {
 	if (logEnable) log.debug(description)
-	log.debug(description)
-	log.debug "Here"
+	if (logEnable) log.debug(description)
+	if (logEnable) log.debug "Here"
 
 	byte[] msg_byte = hubitat.helper.HexUtils.hexStringToByteArray(description)
 
@@ -46,7 +46,7 @@ def parse(String description) {
 
 	status = status[20..-1]
 
-	log.debug status
+	if (logEnable) log.debug status
 
 	if (status.startsWith("{")) {
 
@@ -63,10 +63,10 @@ def parse(String description) {
 		// Does not work
 		status = status[24..-1]
 		status = status[3+16..-41]
-		log.debug "Encryted message: $status"
+		if (logEnable) log.debug "Encryted message: $status"
 
 		dec_status = decrypt(status, settings.localKey)
-		log.debug "Decryted message: ${dec_status.getBytes()}"
+		if (logEnable) log.debug "Decryted message: ${dec_status.getBytes()}"
 	}
 
 	try {
@@ -105,7 +105,7 @@ import javax.crypto.Cipher
 
 // do the magic
 def encrypt (def plainText, def secret) {
-	//log.debug ("Encrypting - ${plainText}","trace")
+	//if (logEnable) log.debug ("Encrypting - ${plainText}","trace")
 	// this particular magic sauce pads the payload to 128 bits per chunk
 	// even though that shouldn't work with S5Padding....
 	def cipher = Cipher.getInstance("AES/ECB/PKCS5Padding ")
@@ -133,7 +133,7 @@ def decrypt (def cypherText, def secret) {
 	SecretKeySpec key = new SecretKeySpec(secret.getBytes("UTF-8"), "AES")
 	cipher.init(Cipher.DECRYPT_MODE, key)
 
-	log.debug decodedBytes.size()
+	if (logEnable) log.debug decodedBytes.size()
 	//whammy!
 	return new String(cipher.doFinal(decodedBytes), "UTF-8")
 }
@@ -155,7 +155,7 @@ def CRC32b(bytes, length) {
 			mask = -(crc & 1)
 			crc = (crc >> 1) ^(0xEDB88320 & mask)
 		}
-		//log.debug Long.toHexString(~crc & 0xffffffff) + " - " + b
+		//if (logEnable) log.debug Long.toHexString(~crc & 0xffffffff) + " - " + b
 	}
 
 	return ~crc
@@ -193,16 +193,16 @@ def generate_payload(command, data=null) {
 	json_payload = json_payload.replaceFirst("\"", "")
 	json_payload = json_payload[0..-2]
 
-	log.debug json_payload
+	if (logEnable) log.debug json_payload
 
 	if (command == "set") {
 		encrypted_payload = encrypt(json_payload, settings.localKey)
 
-		log.debug encrypted_payload
+		if (logEnable) log.debug encrypted_payload
 
 		preMd5String = "data=" + encrypted_payload + "||lpv=" + "3.1" + "||" + settings.localKey
 
-		log.debug "preMd5String" + preMd5String
+		if (logEnable) log.debug "preMd5String" + preMd5String
 
 		hexdigest = generateMD5(preMd5String)
 
@@ -211,7 +211,7 @@ def generate_payload(command, data=null) {
 		json_payload = "3.1" + hexdig + encrypted_payload
 	}
 
-	log.debug json_payload
+	if (logEnable) log.debug json_payload
 
 	ByteArrayOutputStream output = new ByteArrayOutputStream()
 
@@ -220,17 +220,17 @@ def generate_payload(command, data=null) {
 
 	byte[] bff = output.toByteArray()
 
-	//log.debug hubitat.helper.HexUtils.byteArrayToHexString(bff)
+	//if (logEnable) log.debug hubitat.helper.HexUtils.byteArrayToHexString(bff)
 
 	postfix_payload = bff
 
-	//log.debug "Postfix payload: " + postfix_payload
+	//if (logEnable) log.debug "Postfix payload: " + postfix_payload
 
 	postfix_payload_hex_len = postfix_payload.size()
 
-	log.debug postfix_payload_hex_len
+	if (logEnable) log.debug postfix_payload_hex_len
 
-	log.debug "Prefix: " + hubitat.helper.HexUtils.byteArrayToHexString(hubitat.helper.HexUtils.hexStringToByteArray(payload()["device"]["prefix"]))
+	if (logEnable) log.debug "Prefix: " + hubitat.helper.HexUtils.byteArrayToHexString(hubitat.helper.HexUtils.hexStringToByteArray(payload()["device"]["prefix"]))
 
 	output = new ByteArrayOutputStream();
 
@@ -243,11 +243,11 @@ def generate_payload(command, data=null) {
 	byte[] buf = output.toByteArray()
 
 	crc32 = CRC32b(buf, buf.size()-8) & 0xffffffff
-	log.debug buf.size()
+	if (logEnable) log.debug buf.size()
 
 	hex_crc = Long.toHexString(crc32)
 
-	log.debug "HEX crc: $hex_crc"
+	if (logEnable) log.debug "HEX crc: $hex_crc"
 
 	crc_bytes = hubitat.helper.HexUtils.hexStringToByteArray(hex_crc)
 
@@ -283,7 +283,7 @@ def on() {
 
 	def buf = generate_payload("set", ["${settings.endpoint}":true])
 
-	log.debug hubitat.helper.HexUtils.byteArrayToHexString(buf)
+	if (logEnable) log.debug hubitat.helper.HexUtils.byteArrayToHexString(buf)
 
 	String msg = hubitat.helper.HexUtils.byteArrayToHexString(buf)
 
