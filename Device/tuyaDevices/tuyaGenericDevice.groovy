@@ -296,5 +296,5 @@ def on() {
 }
 
 def off() {
-
+	sendEvent(name: "switch", value : "off", isStateChange : true)
 }
