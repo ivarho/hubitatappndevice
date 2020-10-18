@@ -244,7 +244,7 @@ def getStatus() {
 	def id = params.id
 	def sub_id = params.sub_id
 
-	log.debug("Device requesting status: $id, $sub_id")
+	if (logEnable) log.debug("Device requesting status: $id, $sub_id")
 
 	def device = getChildDevices().find{it.deviceNetworkId == id}
 
