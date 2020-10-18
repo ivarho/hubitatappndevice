@@ -94,7 +94,7 @@ def anyOpen(doors) {
 	def anyOpenDoors = false
 
 	doors.each {door ->
-		log.debug door.label + ": " + door.currentValue("contact")
+		log.debug door.label + ": " + door.currentValue("contact", true)
 		if (door.currentValue("contact") == "open") {
 			anyOpenDoors = true
 		}
