@@ -2,6 +2,15 @@
  * tuya Wifi Siren Device
  *
  */
+
+import hubitat.device.HubAction
+import hubitat.device.Protocol
+
+import javax.crypto.spec.SecretKeySpec;
+import javax.crypto.spec.IvParameterSpec;
+import javax.crypto.Cipher
+import java.security.MessageDigest
+
 metadata {
 	definition(name: "tuya Wifi Siren", namespace: "iholand", author: "iholand") {
 		capability "Alarm"
@@ -45,21 +54,13 @@ def setSirenType(type) {
 
 	def buf = generate_payload("set", ["102":type.toString()])
 
-	String msg = hubitat.helper.HexUtils.byteArrayToHexString(buf)
-
-	//port 6668
-	interfaces.rawSocket.connect(settings.ipaddress, 6668, byteInterface: true, readDelay: 500)
-	interfaces.rawSocket.sendMessage(msg)
+	send(buf)
 }
 
 def setSirenLength(length) {
 	def buf = generate_payload("set", ["103":length])
 
-	String msg = hubitat.helper.HexUtils.byteArrayToHexString(buf)
-
-	//port 6668
-	interfaces.rawSocket.connect(settings.ipaddress, 6668, byteInterface: true, readDelay: 500)
-	interfaces.rawSocket.sendMessage(msg)
+	send(buf)
 }
 
 def parse(String description) {
@@ -128,10 +129,6 @@ def payload()
 // Huge thank you to MrYutz for posting Groovy AES ecryption drivers for groovy
 //https://community.hubitat.com/t/groovy-aes-encryption-driver/31556
 
-import javax.crypto.spec.SecretKeySpec;
-import javax.crypto.spec.IvParameterSpec;
-import javax.crypto.Cipher
-
 // do the magic
 def encrypt (def plainText, def secret) {
 	//if (logEnable) log.debug ("Encrypting - ${plainText}","trace")
@@ -166,8 +163,6 @@ def decrypt (def cypherText, def secret) {
 	//whammy!
 	return new String(cipher.doFinal(decodedBytes), "UTF-8")
 }
-
-import java.security.MessageDigest
 
 def generateMD5(String s){
 	MessageDigest.getInstance("MD5").digest(s.bytes).encodeHex().toString()
@@ -288,8 +283,17 @@ def generate_payload(command, data=null) {
 	return buf
 }
 
-import hubitat.device.HubAction
-import hubitat.device.Protocol
+def send(byte[] buf) {
+	String msg = hubitat.helper.HexUtils.byteArrayToHexString(buf)
+
+	try {
+		//port 6668
+		interfaces.rawSocket.connect(settings.ipaddress, 6668, byteInterface: true, readDelay: 500)
+		interfaces.rawSocket.sendMessage(msg)
+	} catch (e) {
+		log.error "Error $e"
+	}
+}
 
 def afterStatus() {
 	log.warn "Running after status"
@@ -300,16 +304,7 @@ def afterStatus() {
 def status() {
 	byte[] buf = generate_payload("status")
 
-	String msg = hubitat.helper.HexUtils.byteArrayToHexString(buf)
-
-	// Needed to use the rawSocket interface to get a response
-	interfaces.rawSocket.connect(settings.ipaddress, 6668, byteInterface: true, readDelay: 500)
-
-	try {
-		interfaces.rawSocket.sendMessage(msg)
-	} catch (e) {
-		log.error "Error $e"
-	}
+	send(buf)
 }
 
 def off() {
@@ -323,13 +318,9 @@ def both() {
 def siren() {
 	def buf = generate_payload("set", ["104":true])
 
-	String msg = hubitat.helper.HexUtils.byteArrayToHexString(buf)
+	send(buf)
 
-	//port 6668
-	interfaces.rawSocket.connect(settings.ipaddress, 6668, byteInterface: true, readDelay: 500)
-	interfaces.rawSocket.sendMessage(msg)
-
-	// Check Status
+	// Poll for status change
 	runIn(1, status)
 	runIn(device.currentValue("sirenLength").toInteger(), afterStatus)
 }
