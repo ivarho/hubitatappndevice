@@ -8,6 +8,7 @@ metadata {
 		capability "PresenceSensor"
 
 		attribute "lastCheckin", "String"
+		attribute "batteryVoltage", "number"
 
 		command "setTemperature"
 		command "setBatteryVoltage"
@@ -92,7 +93,6 @@ def checked_in() {
 	if (logEnable) log.debug("$timeString")
 	sendEvent(name: "lastCheckin", value: timeString, displayed: false)
 
-	sendEvent(name: "battery", value: 100)
 	sendEvent(name: "presence", value: "present", isStateChange: true)
 
 	def timeout = 0
@@ -132,7 +132,10 @@ def setTemperature(temperature) {
 def setBatteryVoltage(voltage) {
 	if (logEnable) log.debug "Executing 'setBatteryVoltage'";
 
+	bat_percentage = (voltage - 2500)/(3300-2500)*100
+
 	sendEvent(name: "batteryVoltage", value: voltage)
+	sendEvent(name: "battery", value: bat_percentage)
 
 	checked_in()
 }
@@ -185,7 +188,4 @@ def timeoutHandler()
 
 	sendEvent(name: "healthStatus", value: "offline")
 	sendEvent(name: "presence", value: "not present", isStateChange: true)
-
-	sendEvent(name: "battery", value: 5)
-
 }
