@@ -12,6 +12,7 @@ definition (
 preferences {
 	section("Debugging") {
 		input name: "logEnable", type: "bool", title: "Enable debug logging", defaultValue: true
+		input name: "acceptNewDevices", type: "bool", title: "Accept new devices for 3 hours:", defaultValue: true
 	}
 }
 
@@ -80,12 +81,19 @@ def logsOff() {
 	device.updateSetting("logEnable", [value: "false", type: "bool"])
 }
 
+def newDevicesOff() {
+	log.warn "Does not accept new devices any more..."
+	device.updateSetting("acceptNewDevices", [value: "false", type: "bool"])
+}
+
 def updated() {
 	log.debug "updated"
 	log.debug "Access URL:" + getFullLocalApiServerUrl()
 	log.debug "Access token:" + state.accessToken
 
 	if (logEnable) runIn(1800, logsOff)
+
+	if (acceptNewDevices) runIn(3*60*60, newDevicesOff)
 
 	initialize()
 }
@@ -116,11 +124,13 @@ void updateTemperature() {
 		tempSensor.setTemperature(temperature)
 		//tempSensor.sendEvent(name: "temperature", value: temperature)
 		if (logEnable) log.debug("${tempSensor.displayName} (${tempSensor.name}) = $temperature *C")
-	} else {
+	} else if (acceptNewDevices) {
 		def newTempSensor = addChildDevice("iholand", "Multisensor",  id, null, [name: id, componentName: id, componentLabel: id])
 		newTempSensor.setTemperature(temperature)
 		//newTempSensor.sendEvent(name: "temperature", value: temperature)
 		if (logEnable) log.debug("${newTempSensor.name}) = $temperature *C")
+	} else {
+		log.warn "New temperature device attempting to connect: $id, $temperature"
 	}
 }
 
@@ -133,10 +143,12 @@ def updateBattery() {
 	if (tempSensor != null) {
 		tempSensor.setBatteryVoltage(voltage)
 		if (logEnable) log.debug("${tempSensor.displayName} (${tempSensor.name}) = $voltage mV")
-	} else {
+	} else if (acceptNewDevices) {
 		def newTempSensor = addChildDevice("iholand", "Multisensor",  id, null, [name: id, componentName: id, componentLabel: id])
 		newTempSensor.setBatteryVoltage(voltage)
 		if (logEnable) log.debug("${newTempSensor.name} = $voltage mV")
+	} else {
+		log.warn "New battery device attempting to connect: $id, $voltage"
 	}
 }
 
@@ -156,10 +168,12 @@ void updateHumidity() {
 		Sensor.setHumidity(humid, raw)
 		 if (logEnable) log.debug("${Sensor.displayName} (${Sensor.name}) = $humid %, $raw")
 
-	} else {
+	} else if (acceptNewDevices) {
 		def newSensor = addChildDevice("iholand", "Multisensor",  id, null, [name: id, componentName: id, componentLabel: id])
 		newSensor.setHumidity(humid, raw)
 		if (logEnable) log.debug("${newSensor.name} = $humid %")
+	} else {
+		log.warn "New humid device attempting to connect: $id, $humid"
 	}
 }
 
@@ -172,9 +186,11 @@ void updateStatus() {
 	if (status != null) {
 		status.setStatus(on_off)
 		if (logEnable) log.debug("${status.displayName} (${status.name}) = ${on_off?"on":"off"}")
-	} else {
+	} else if (acceptNewDevices) {
 		def newStatus = addChildDevice("iholand", "General Switch",  id, null, [name: id, componentName: id, componentLabel: id])
 		newStatus.setStatus(on_off)
+	} else {
+		log.warn "New status device attempting to connect: $id, $on_off"
 	}
 }
 
@@ -194,12 +210,14 @@ def updatePower() {
 			if (logEnable) log.debug("${powerMeter.displayName} (${powerMeter.name}) = $power W")
 		}
 
-	} else {
+	} else if (acceptNewDevices) {
 		def newPowerMeter = addChildDevice("iholand", "Power Meter",  id, null, [name: id, componentName: id, componentLabel: id])
 
 		newPowerMeter.setPower(power)
 		if (logEnable) log.debug("${newPowerMeter.name} = $power W")
 
+	} else {
+		log.warn "New power device attempting to connect: $id, $power"
 	}
 }
 
@@ -221,12 +239,14 @@ def updateEnergy() {
 
 		if (logEnable) log.debug("${powerMeter.displayName} (${powerMeter.name}) = $power kWh")
 
-	} else {
+	} else if (acceptNewDevices) {
 		def newPowerMeter = addChildDevice("iholand", "Power Meter",  id, null, [name: id, componentName: id, componentLabel: id])
 
 		newPowerMeter.setEnergy(power)
 		if (logEnable) log.debug("${newPowerMeter.name} = $power kWh")
 
+	} else {
+		log.warn "New energy device attempting to connect: $id, $power"
 	}
 }
 
