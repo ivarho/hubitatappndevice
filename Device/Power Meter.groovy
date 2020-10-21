@@ -19,6 +19,14 @@ metadata {
 		capability "Energy Meter"
 		capability "Sensor"
 
+		attribute "energyTodayLBL", "string"
+		attribute "energyTillTodayLBL", "string"
+		attribute "powerLBL", "string"
+
+		// Used as flow meter as well
+		attribute "flowL_hour_LBL", "string"
+		attribute "flowL_minute_LBL", "string"
+
 		command "setPower"
 		command "setEnergy"
 	}
@@ -52,10 +60,15 @@ def parse(String description) {
 
 // handle commands
 def setPower(power) {
-	log.debug "Executing 'setPower'";
-	// TODO: handle 'setTemperature' command
+	log.debug "Executing 'setPower'"
 
-	sendEvent(name: "power", value: power, unit: "W", isStateChange: true);
+	sendEvent(name: "powerLBL", value: "${power} W", isStateChange: true)
+	sendEvent(name: "power", value: power, unit: "W", isStateChange: true)
+
+	// Same device used as flow meter
+	sendEvent(name: "flowL_hour_LBL", value: "${power} L/h", isStateChange: true)
+	sendEvent(name: "flowL_minute_LBL", value: "${power/60.0} L/m", isStateChange: true)
+
 }
 
 def setEnergy(energy) {
@@ -83,6 +96,9 @@ def setEnergy(energy) {
 	state.energy_today = energy_today
 
 	log.debug("Energy today: $state.energy_today")
+
+	sendEvent(name: "energyTodayLBL", value: "${energy_today.round(1)} kWh", isStateChange: true)
+	sendEvent(name: "energyTillTodayLBL", value: "${energy} kWh", isStateChange: true)
 
 	sendEvent(name: "energy", value: energy_today.round(1), unit: "kWh", isStateChange: true)
 	sendEvent(name: "energy_total", value: energy, unit: "kWh", isStateChange: true)
