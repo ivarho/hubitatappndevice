@@ -70,7 +70,7 @@ def alarmHandler(evt) {
 def contactHandler(evt) {
 	log.debug("Contact triggered:" + evt.value)
 
-	if (evt.value == "open" && location.hsmStatus?.value != "disarmed") {
+	if (evt.value == "open" && location.hsmStatus?.value == "armedAway") {
 		runIn(delaySeconds, turnOnChildDevice)
 	}
 }
