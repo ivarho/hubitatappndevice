@@ -31,6 +31,8 @@ preferences {
 def updated(settings) {
 	log.debug "Updated with settings: $settings"
 
+	unschedule()
+
 	updateWasteType()
 
 	schedule("0 0 10 ? * MON", updateWasteType)
@@ -38,7 +40,7 @@ def updated(settings) {
 }
 
 // parse events into attributes
-def parse(description, data=null) {
+def parse(description, data) {
 	def page_content = description.getData()
 
 	def wasteplan_content_start = page_content.indexOf("id=\"wasteplan-content")
