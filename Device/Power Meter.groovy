@@ -34,12 +34,21 @@ metadata {
 
 preferences {
 	input "Energy to today", "decimal"
+	input name: "logEnable", type: "bool", title: "Enable debug logging", defaultValue: true
 }
+
+def logsOff() {
+	log.warn "debug logging disabled..."
+	device.updateSetting("logEnable", [value: "false", type: "bool"])
+}
+
 
 def updated(settings) {
 	log.debug "Updated with settings: $settings"
 
 	state.energy_today = 0
+
+	if (logEnable) runIn(1800, logsOff)
 
 	startNewDay()
 
@@ -60,22 +69,24 @@ def parse(String description) {
 
 // handle commands
 def setPower(power) {
-	log.debug "Executing 'setPower'"
+	if (logEnable) log.debug "Executing 'setPower'"
 
 	sendEvent(name: "powerLBL", value: "${power} W", isStateChange: true)
 	sendEvent(name: "power", value: power, unit: "W", isStateChange: true)
 
+	def liters_per_minute = power.toFloat().round(1)
+
 	// Same device used as flow meter
 	sendEvent(name: "flowL_hour_LBL", value: "${power} L/h", isStateChange: true)
-	sendEvent(name: "flowL_minute_LBL", value: "${power/60.0} L/m", isStateChange: true)
+	sendEvent(name: "flowL_minute_LBL", value: "${liters_per_minute} L/m", isStateChange: true)
 
 }
 
 def setEnergy(energy) {
-	log.debug "Executing 'setEnergy'";
+	if (logEnable) log.debug "Executing 'setEnergy'";
 	// TODO: handle 'setTemperature' command
 
-	log.debug(energy)
+	if (logEnable) log.debug(energy)
 
 	def energy_to_today = state.energy_to_today
 
@@ -83,7 +94,7 @@ def setEnergy(energy) {
 		energy_to_today = 0.0
 	}
 
-	log.debug("Energy to today: '${state.energy_to_today}'")
+	if (logEnable) log.debug("Energy to today: '${state.energy_to_today}'")
 
 	state.energy_total = energy.toFloat().round(1)
 
@@ -95,7 +106,7 @@ def setEnergy(energy) {
 
 	state.energy_today = energy_today
 
-	log.debug("Energy today: $state.energy_today")
+	if (logEnable) log.debug("Energy today: $state.energy_today")
 
 	sendEvent(name: "energyTodayLBL", value: "${energy_today.round(1)} kWh", isStateChange: true)
 	sendEvent(name: "energyTillTodayLBL", value: "${energy} kWh", isStateChange: true)
@@ -105,7 +116,7 @@ def setEnergy(energy) {
 }
 
 def startNewDay() {
-	log.debug "Calculating new day"
+	if (logEnable) log.debug "Calculating new day"
 
 	def energy_today = state.energy_today.toFloat().round(1)
 

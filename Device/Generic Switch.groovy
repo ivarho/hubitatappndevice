@@ -21,8 +21,6 @@ def off() {
 
 def setStatus(status)
 {
-	log.debug("Executing setStatus ${status}")
-
 	if (status == "0") {
 		off()
 	} else if (status == "1") {
