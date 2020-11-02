@@ -27,7 +27,7 @@ definition(
 preferences {
 	section("Monitor these devices") {
 		input "presenceSensors", "capability.presenceSensor", title: "Monitor:", multiple: true
-		input "onlineMessage", "text", title: "Back online message:"
+		input "warningMessage", "text", title: "Warning message:"
 		input "audioNotification", "capability.speechSynthesis", title: "Audio Notifier:"
 		input "textNotification", "capability.notification", title: "Text Notifier:"
 		input "infoPresenceSensor", "capability.presenceSensor", title: "Select precense sensor for status:"
@@ -41,15 +41,19 @@ def installed() {
 	initialize()
 }
 
+def uninstalled() {
+	log.debug "App uninstalled"
+}
+
 def updated() {
 	log.debug "Updated with settings: ${settings}"
 
-	unsubscribe()
+	unschedule(checkAllPrecenseSensorsPresent)
 	initialize()
 }
 
 def initialize() {
-	subscribe(presenceSensors, "presence", presenceChangedHandler);
+	schedule("0 */21 * ? * *", checkAllPrecenseSensorsPresent)
 	state.online = 1
 }
 
@@ -94,5 +98,41 @@ def presenceChangedHandler(evt) {
 		state.online = 1
 
 		textNotification.deviceNotification("$deviceName: $onlineMessage")
+	}
+}
+
+def checkAllPrecenseSensorsPresent() {
+
+	if (infoPresenceSensor != null) {
+
+		def devicesPresent = true;
+
+		presenceSensors.each {presenceSensor ->
+			if (enableDebug) log.debug presenceSensor.label + ": " + presenceSensor.currentValue("presence", true)
+			if (presenceSensor.currentValue("presence") == "not present") {
+				devicesPresent = false
+			}
+		}
+
+		if (devicesPresent == false) {
+			infoPresenceSensor.departed()
+		} else {
+			infoPresenceSensor.arrived()
+		}
+
+		if (devicesPresent == false) {
+			log.warn "$warningMessage med $deviceName"
+			state.online = 0
+
+			if (infoPresenceSensor != null) {
+				infoPresenceSensor.departed()
+			}
+
+			textNotification?.deviceNotification("$deviceName: $warningMessage")
+			audioNotification?.speak("Dette er en informasjonsmelding: mistet kontakten med $deviceName")
+
+		}
+
+		return devicesPresent
 	}
 }
