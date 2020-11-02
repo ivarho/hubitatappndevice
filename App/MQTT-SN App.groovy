@@ -185,7 +185,7 @@ void updateStatus() {
 
 	if (status != null) {
 		status.setStatus(on_off)
-		if (logEnable) log.debug("${status.displayName} (${status.name}) = ${on_off?"on":"off"}")
+		if (logEnable) log.debug("${status.displayName} (${status.name}) = ${on_off==1?"on":"off"}")
 	} else if (acceptNewDevices) {
 		def newStatus = addChildDevice("iholand", "General Switch",  id, null, [name: id, componentName: id, componentLabel: id])
 		newStatus.setStatus(on_off)
