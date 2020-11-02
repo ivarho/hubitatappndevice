@@ -132,10 +132,11 @@ def setTemperature(temperature) {
 def setBatteryVoltage(voltage) {
 	if (logEnable) log.debug "Executing 'setBatteryVoltage'";
 
-	bat_percentage = (voltage - 2500)/(3300-2500)*100
+	bat_percentage = (voltage - 2500)/(3300-2500)*100.0
+	bat_percentage = bat_percentage.toFloat()
 
 	sendEvent(name: "batteryVoltage", value: voltage)
-	sendEvent(name: "battery", value: bat_percentage)
+	sendEvent(name: "battery", value: bat_percentage.round(0), unit: "%")
 
 	checked_in()
 }
