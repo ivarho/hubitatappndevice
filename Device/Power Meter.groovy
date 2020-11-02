@@ -74,7 +74,9 @@ def setPower(power) {
 	sendEvent(name: "powerLBL", value: "${power} W", isStateChange: true)
 	sendEvent(name: "power", value: power, unit: "W", isStateChange: true)
 
-	def liters_per_minute = power.toFloat().round(1)
+	def liters_per_minute = power.toFloat()
+	liters_per_minute = liters_per_minute/60
+	liters_per_minute = liters_per_minute.round(1)
 
 	// Same device used as flow meter
 	sendEvent(name: "flowL_hour_LBL", value: "${power} L/h", isStateChange: true)
