@@ -55,6 +55,7 @@ def updated() {
 def initialize() {
 	schedule("0 */21 * ? * *", checkAllPrecenseSensorsPresent)
 	state.online = 1
+	state.devicesOffline = []
 }
 
 def presenceChangedHandler(evt) {
@@ -106,11 +107,17 @@ def checkAllPrecenseSensorsPresent() {
 	if (infoPresenceSensor != null) {
 
 		def devicesPresent = true;
+		def shouldWarn = false;
 
 		presenceSensors.each {presenceSensor ->
 			if (enableDebug) log.debug presenceSensor.label + ": " + presenceSensor.currentValue("presence", true)
 			if (presenceSensor.currentValue("presence") == "not present") {
 				devicesPresent = false
+				
+				if (presenceSensor.displayName not in state.devicesOffline) {
+					state.devicesOffline.add(presenceSensor.displayName)
+					shouldWarn = true
+				}				
 			}
 		}
 
@@ -120,9 +127,15 @@ def checkAllPrecenseSensorsPresent() {
 			infoPresenceSensor.arrived()
 		}
 
-		if (devicesPresent == false) {
-			log.warn "$warningMessage med $deviceName"
+		if (shouldWarn == true) {
+			//log.warn "$warningMessage med $deviceName"
 			state.online = 0
+
+			def deviceName = ""
+
+			state.devicesOffline.each { devName ->
+				deviceName += deviceName + " "
+			}
 
 			if (infoPresenceSensor != null) {
 				infoPresenceSensor.departed()
