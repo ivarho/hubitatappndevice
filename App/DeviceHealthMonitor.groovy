@@ -114,7 +114,7 @@ def checkAllPrecenseSensorsPresent() {
 			if (presenceSensor.currentValue("presence") == "not present") {
 				devicesPresent = false
 				
-				if (presenceSensor.displayName not in state.devicesOffline) {
+				if (!(presenceSensor.displayName in state.devicesOffline)) {
 					state.devicesOffline.add(presenceSensor.displayName)
 					shouldWarn = true
 				}				
