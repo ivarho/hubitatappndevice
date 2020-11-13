@@ -9,6 +9,8 @@ metadata {
 
 		attribute "lastCheckin", "String"
 		attribute "batteryVoltage", "number"
+		attribute "maxTemp", "number"
+		attribute "minTemp", "number"
 
 		command "setTemperature"
 		command "setBatteryVoltage"
