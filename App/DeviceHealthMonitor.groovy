@@ -53,7 +53,7 @@ def updated() {
 }
 
 def initialize() {
-	schedule("0 */21 * ? * *", checkAllPrecenseSensorsPresent)
+	schedule("0 */10 * ? * *", checkAllPrecenseSensorsPresent)
 	state.online = 1
 	state.devicesOffline = []
 }
@@ -113,11 +113,11 @@ def checkAllPrecenseSensorsPresent() {
 			if (enableDebug) log.debug presenceSensor.label + ": " + presenceSensor.currentValue("presence", true)
 			if (presenceSensor.currentValue("presence") == "not present") {
 				devicesPresent = false
-				
+
 				if (!(presenceSensor.displayName in state.devicesOffline)) {
 					state.devicesOffline.add(presenceSensor.displayName)
 					shouldWarn = true
-				}				
+				}
 			}
 		}
 
@@ -125,6 +125,7 @@ def checkAllPrecenseSensorsPresent() {
 			infoPresenceSensor.departed()
 		} else {
 			infoPresenceSensor.arrived()
+			state.devicesOffline = []
 		}
 
 		if (shouldWarn == true) {
@@ -134,7 +135,7 @@ def checkAllPrecenseSensorsPresent() {
 			def deviceName = ""
 
 			state.devicesOffline.each { devName ->
-				deviceName += deviceName + " "
+				deviceName += devName + " "
 			}
 
 			if (infoPresenceSensor != null) {
