@@ -113,7 +113,7 @@ def setTemperature(temperature) {
 	if (logEnable) log.debug "Executing 'setTemperature'";
 	// TODO: handle 'setTemperature' command
 
-	if (temperature > -60 && temperature < 300 && temperature != 250.00) {
+	if (temperature > -60 && temperature < 300) {
 		sendEvent(name: "temperature", value: temperature.round(1), unit: "°C", isStateChange: true)
 	}
 
@@ -158,10 +158,6 @@ def setHumidity(humid, raw = 9999) {
 	sendEvent(name: "humidity", value: humid.round(1), unit: "%", isStateChange: true)
 
 	sendEvent(name: "raw_humid", value: raw)
-
-	if (state.maxTemp == 250.00) {
-		sendEvent(name: "temperature", value: humid.round(1))
-	}
 
 	checked_in()
 }
