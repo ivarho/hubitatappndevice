@@ -30,18 +30,23 @@ preferences {
 		input "contactSensor", "capability.contactSensor", title: "Select contract sensor to monitor", multiple: false
 		input "colorBulbsToControl", "capability.colorControl", title: "Select color bulbs to control", multiple: true
 
-		input "openDoorMessage", "text", title: "Message to speak after 3 min"
+		input "openDoorMessage", "text", title: "Message to speak after second warning"
 		input "firstWarning", "number", title: "Seconds to first warning", default: 40
 		input "secondWarning", "number", title: "Seconds to second warning", default: 3*60
 
 		// Notifications
-		input "audioNotification", "capability.speechSynthesis", title: "Audio Notifier:"
-		input "textNotification", "capability.notification", title: "Text Notifier:"
+		input "audioNotification", "capability.speechSynthesis", title: "Audio Notifier:", multiple: true
+		input "textNotification", "capability.notification", title: "Text Notifier:", multiple: true
+
+		// Select color for notification:
+		input "hueSetting", "number", title: "Hue (0..100)", default: 66
+		input "saturationSetting", "number", title: "Saturation (0..100)", default: 100
+		input "levelSetting", "number", title: "Level (0..100)", default: 50
 
 		// Debug Control
 		input "enableDebug", "bool", title: "Enable debug"
 		input "enableTrace", "bool", title: "Enable trace"
-		input "enableInfo", "bool", title: "Enable trace"
+		input "enableInfo", "bool", title: "Enable info"
 	}
 }
 
@@ -85,8 +90,8 @@ def updated() {
 def initialize() {
 	//schedule("0 */10 * ? * *", ...)
 	unsubscribe()
-	subscribe(contactSensor, "contact.open", FridgeDoorOpen)
-	subscribe(contactSensor, "contact.closed", FridgeDoorClosed)
+	subscribe(contactSensor, "contact.open", DoorOpen)
+	subscribe(contactSensor, "contact.closed", DoorClosed)
 
 
 	// Turn off logs after 30 min
@@ -98,14 +103,14 @@ def initialize() {
 }
 
 // App code here
-def FridgeDoorOpen(evt) {
-	logTrace "Fridge door open"
-	runIn(firstWarning, FridgeDoorOpenTimeout)
+def DoorOpen(evt) {
+	logTrace "Door open"
+	runIn(firstWarning, DoorOpenTimeout)
 	runIn(secondWarning, NotifyDoorOpen)
 }
 
-def FridgeDoorOpenTimeout() {
-	logTrace "FridgeDoorOpenTimeout"
+def DoorOpenTimeout() {
+	logTrace "DoorOpenTimeout"
 
 	state.openTimeout = true
 
@@ -118,26 +123,29 @@ def FridgeDoorOpenTimeout() {
 		state.bulbSettings[bulbName] = ['switch': bulb.currentValue("switch"), 'color': ['hue': bulb.currentValue("hue"), 'saturation': bulb.currentValue("saturation"), 'level': bulb.currentValue("level")]]
 
 		// Set color blue
-		bulb.setColor([hue: 66, saturation: 100, level: 50])
+		bulb.setColor([hue: hueSetting, saturation: saturationSetting, level: levelSetting])
 	}
 }
 
-def FridgeDoorClosed(evt) {
-	logTrace "Fridge door closed"
+def DoorClosed(evt) {
+	logTrace "Door closed"
 
-	unschedule(FridgeDoorOpenTimeout)
+	unschedule(DoorOpenTimeout)
 	unschedule(NotifyDoorOpen)
 
 	if (state.openTimeout == true) {
 		colorBulbsToControl.each { bulb ->
 			String bulbName = bulb.getLabel()
 
+
 			// Restore bulb settings
 			if (state.bulbSettings[bulbName] != null) {
 				bulb.setColor(state.bulbSettings[bulbName].color)
 
-				if (state.bulbSettings[bulbName].switch == "off") {
-					runIn(3, switchBulbOff, [device: bulb])
+				// If bulb was off in the first place, or mode is Away turn it off
+				if (state.bulbSettings[bulbName].switch == "off" || location.getMode() == "Away") {
+					// This cannot run too early as the hub is busy sending previous Zigbee messages
+					runIn(10, switchBulbOff, [data: bulbName])
 				}
 			}
 		}
@@ -145,10 +153,27 @@ def FridgeDoorClosed(evt) {
 }
 
 def NotifyDoorOpen() {
-	audioNotification?.speak(openDoorMessage)
-	textNotification?.deviceNotification(openDoorMessage)
+	logTrace "Running second warning"
+
+	audioNotification?.each { it ->
+		it.speak(openDoorMessage)
+	}
+
+	textNotification?.each { it ->
+		it.deviceNotification(openDoorMessage)
+	}
 }
 
 def switchBulbOff(device) {
-	device.device.off()
+	logTrace "switchBulbOff"
+	logDebug device
+
+	colorBulbsToControl.each { bulb ->
+		String bulbName = bulb.getLabel()
+
+		if (bulbName == device) {
+			logTrace "Switching $bulbName off"
+			bulb.off()
+		}
+	}
 }
