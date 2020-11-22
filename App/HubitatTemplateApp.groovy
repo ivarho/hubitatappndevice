@@ -38,14 +38,14 @@ preferences {
 		// Debug Control
 		input "enableDebug", "bool", title: "Enable debug"
 		input "enableTrace", "bool", title: "Enable trace"
-		input "enableInfo", "bool", title: "Enable trace"
+		input "enableInfo", "bool", title: "Enable info"
 	}
 }
 
 // Housekeeping
 def logsOff() {
 	log.warn "debug logging disabled..."
-	device.updateSetting("logEnable", [value: "false", type: "bool"])
+	device.updateSetting("enableDebug", [value: "false", type: "bool"])
 }
 
 def logDebug(msg) {
