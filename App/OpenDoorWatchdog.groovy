@@ -18,7 +18,7 @@ definition(
 	name: "Open Door watchdog",
 	namespace: "iholand",
 	author: "Ivar Holand",
-	description: "This can be used as a starting point for new Hubitat App development",
+	description: "This app can be used to monitor open doors/windows/fridges etc. first warning is light changing color, and next warning can be via speaker and/or push to phone",
 	category: "",
 	iconUrl: "",
 	iconX2Url: "",
