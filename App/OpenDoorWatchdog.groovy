@@ -151,6 +151,9 @@ def DoorClosed(evt) {
 				}
 			}
 		}
+
+		// Clear settings
+		state.bulbSettings = [:]
 	}
 
 	// Reset state machine, just in case
