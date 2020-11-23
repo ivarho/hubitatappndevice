@@ -1,7 +1,7 @@
 /**
  *  Tibber Outlet Controller Slave
  *
- *  Copyright 2020 Ivar Holand
+ *  Copyright 2019-2020 Ivar Holand
  *
  *  Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
  *  in compliance with the License. You may obtain a copy of the License at:
@@ -13,6 +13,7 @@
  *  for the specific language governing permissions and limitations under the License.
  *
  */
+
 metadata {
 	definition (name: "Tibber Outlet Controller Slave", namespace: "iholand", author: "Ivar Holand") {
 		capability "Switch"
