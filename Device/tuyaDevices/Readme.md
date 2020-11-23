@@ -12,3 +12,6 @@ I used a package sniffer with the original tuya app to find out which endpoint t
 has endpoint 104. But for other switches I think I have seen endpoints around 0-4.
 
 I am posting this half finished work for others to get started with tuya devices on Hubitat.
+
+The tuyaGenericDevice.groovy can be used as a basis for developing support for new devices.
+The tuyaWifiSiren.groovy is for the NEO Alarm Siren (Wifi-model)
