@@ -134,6 +134,8 @@ def DoorClosed(evt) {
 	unschedule(NotifyDoorOpen)
 
 	if (state.openTimeout == true) {
+		state.openTimeout = false
+
 		colorBulbsToControl.each { bulb ->
 			String bulbName = bulb.getLabel()
 
@@ -150,6 +152,9 @@ def DoorClosed(evt) {
 			}
 		}
 	}
+
+	// Reset state machine, just in case
+	state.openTimeout = false
 }
 
 def NotifyDoorOpen() {
