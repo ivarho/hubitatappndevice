@@ -139,7 +139,6 @@ def DoorClosed(evt) {
 		colorBulbsToControl.each { bulb ->
 			String bulbName = bulb.getLabel()
 
-
 			// Restore bulb settings
 			if (state.bulbSettings[bulbName] != null) {
 				bulb.setColor(state.bulbSettings[bulbName].color)
@@ -147,7 +146,7 @@ def DoorClosed(evt) {
 				// If bulb was off in the first place, or mode is Away turn it off
 				if (state.bulbSettings[bulbName].switch == "off" || location.getMode() == "Away") {
 					// This cannot run too early as the hub is busy sending previous Zigbee messages
-					runIn(10, switchBulbOff, [data: bulbName])
+					runIn(10, switchBulbOff, [data: bulbName, overwrite: false])
 				}
 			}
 		}
