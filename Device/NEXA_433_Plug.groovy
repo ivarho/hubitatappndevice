@@ -69,15 +69,15 @@ def handler(response, data) {
 
 def timeOut(data) {
 
-	if (data[1] == true) {
+	if (data[1] > 0) {
 		log.warn "Failed to get response from device: ${data}"
-		send_HTTP_get_status(data[0], false)
+		send_HTTP_get_status(data[0], data[1] - 1)
 	} else {
 		log.error "Failed to get response from device: ${data}"
 	}
 }
 
-def send_HTTP_get_status(Integer status, boolean retry = true)
+def send_HTTP_get_status(Integer status, Integer retry = 5)
 {
 	def NhubIP = "192.168.1.186"
 	def NhubPORT = "80"
@@ -103,7 +103,9 @@ def send_HTTP_get_status(Integer status, boolean retry = true)
 
     asynchttpGet(handler, params)
 
-	runIn(1, timeOut, ["data": [status, retry]])
+	Random random = new Random()
+
+	runInMillis(random.nextInt(2000), timeOut, ["data": [status, retry]])
 
 	if (logEnable) log.debug("Sending URI: $URI")
 }
