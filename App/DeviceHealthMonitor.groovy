@@ -46,7 +46,7 @@ def logsOff() {
 }
 
 def logDebug(msg) {
-	logDebug msg
+	if (enableDebug) log.debug msg
 }
 
 def logTrace(msg) {
@@ -131,6 +131,7 @@ def checkAllPrecenseSensorsPresent() {
 	logTrace "checkAllPrecenseSensorsPresent()"
 
 	if (infoPresenceSensor != null) {
+		logTrace "infoPresenceSensor found"
 
 		def devicesPresent = true;
 		def shouldWarn = false;
@@ -140,7 +141,9 @@ def checkAllPrecenseSensorsPresent() {
 			if (presenceSensor.currentValue("presence") == "not present") {
 				devicesPresent = false
 
-				if (!(presenceSensor.displayName in state.devicesOffline)) {
+				if (presenceSensor.displayName in state.devicesOffline) {
+					// Already warned about this device
+				} else {
 					state.devicesOffline.add(presenceSensor.displayName)
 					shouldWarn = true
 				}
