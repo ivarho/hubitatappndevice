@@ -111,7 +111,7 @@ def checked_in() {
 	if (logEnable) log.debug("$timeString")
 	sendEvent(name: "lastCheckin", value: timeString, displayed: false)
 
-	sendEvent(name: "presence", value: "present", isStateChange: true)
+	sendEvent(name: "presence", value: "present")
 
 	def timeout = 0
 
@@ -130,7 +130,7 @@ def setTemperature(temperature) {
 	// TODO: handle 'setTemperature' command
 
 	if (temperature > -60 && temperature < 300) {
-		sendEvent(name: "temperature", value: temperature.round(1), unit: "°C", isStateChange: true)
+		sendEvent(name: "temperature", value: temperature.round(1), unit: "°C")
 	}
 
 	if (temperature > state.maxTemp) {
@@ -171,7 +171,7 @@ def setHumidity(humid, raw = 9999) {
 		humid = map(raw.toInteger(), humidAtMin.toInteger(), humidAtMax.toInteger(), 0, 100);
 	}
 
-	sendEvent(name: "humidity", value: humid.round(1), unit: "%", isStateChange: true)
+	sendEvent(name: "humidity", value: humid.round(1), unit: "%")
 
 	sendEvent(name: "raw_humid", value: raw)
 
@@ -202,5 +202,5 @@ def timeoutHandler()
 	log.warn "Lost connection to sensor: $displayName"
 
 	sendEvent(name: "healthStatus", value: "offline")
-	sendEvent(name: "presence", value: "not present", isStateChange: true)
+	sendEvent(name: "presence", value: "not present")
 }
