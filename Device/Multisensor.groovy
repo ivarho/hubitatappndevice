@@ -27,6 +27,7 @@ metadata {
 		attribute "batteryVoltage", "number"
 		attribute "maxTemp", "number"
 		attribute "minTemp", "number"
+		attribute "s_address", "String"
 
 		command "setTemperature"
 		command "setBatteryVoltage"
@@ -109,7 +110,8 @@ def checked_in() {
 
 	def timeString = new Date().format("yyyy-MM-dd HH:mm:ss", location.timeZone)
 	if (logEnable) log.debug("$timeString")
-	sendEvent(name: "lastCheckin", value: timeString, displayed: false)
+
+	state.lastCheckin = timeString
 
 	sendEvent(name: "presence", value: "present")
 
