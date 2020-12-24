@@ -77,7 +77,7 @@ def timeOut(data) {
 	}
 }
 
-def send_HTTP_get_status(Integer status, Integer retry = 5)
+def send_HTTP_get_status(Integer status, Integer retry = 10)
 {
 	def NhubIP = "192.168.1.186"
 	def NhubPORT = "80"
