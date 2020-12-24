@@ -98,10 +98,10 @@ def send_HTTP_get_status(Integer status, Integer retry = 5)
 	URI = "http://$NhubIP:$NhubPORT/nexa.html?addr=$settings.address&ch=$settings.channel&status=$status"
 
 	def params = [
-            uri        : URI
-    ]
+			uri        : URI
+	]
 
-    asynchttpGet(handler, params)
+	asynchttpGet(handler, params)
 
 	Random random = new Random()
 
