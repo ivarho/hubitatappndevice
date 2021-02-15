@@ -79,6 +79,11 @@ mappings {
 		PUT: "updateEnergy"
 		]
 	}
+	path("/smokeD/:address/:value") {
+		action: [
+		PUT: "smokeDetector"
+		]
+	}
 	path("/:other/:id/:data") {
 		action: [
 		PUT: "other"
@@ -263,6 +268,32 @@ def updateEnergy() {
 
 	} else {
 		log.warn "New energy device attempting to connect: $id, $power"
+	}
+}
+
+def smokeDetector() {
+	def address = params.address
+	def value = params.value
+
+	def id = address
+
+	if (logEnable) log.debug("Smoke detected from sensor ${id}: ${address}")
+
+	def smokeDetectorDevice = getChildDevices().find{it.deviceNetworkId == id}
+
+	if (smokeDetectorDevice != null) {
+
+		smokeDetectorDevice.setDetectionLevel(address, value)
+
+		if (logEnable) log.debug("${smokeDetectorDevice.displayName} (${smokeDetectorDevice.name}) = $address, $value")
+
+	} else {
+		def newsmokeDetectorDevice = addChildDevice("iholand", "Smoke Detector",  id, null, [name: id, componentName: id, componentLabel: id])
+
+		newsmokeDetectorDevice.setDetectionLevel(address, value)
+		if (logEnable) log.debug("${newsmokeDetectorDevice.name} = $address, $value")
+
+		log.warn "New smoke detector device discovered and reporting detected: $id, $address, $value"
 	}
 }
 
