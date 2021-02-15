@@ -30,6 +30,7 @@ preferences {
 		input "thermostat", "capability.thermostat", title: "Thermostat:", required: true
 		input "cooler", "capability.switch", title: "Cooling element:"
 		input "heater", "capability.switch", title: "Heating element:"
+		input "invertedHeater", "bool", title: "Invert heater output?", default: false
 		input "debugEnabled", "bool", title: "Enable debugging"
 	}
 }
@@ -90,9 +91,17 @@ def modeHandler(evt) {
 def heating(boolean heat_on) {
 	if (heater != null) {
 		if (heat_on) {
-			heater.on()
+			if (invertedHeater) {
+				heater.off()
+			} else {
+				heater.on()
+			}
 		} else {
-			heater.off()
+			if (invertedHeater) {
+				heater.on()
+			} else {
+				heater.off()
+			}
 		}
 	}
 }
