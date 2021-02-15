@@ -84,6 +84,11 @@ mappings {
 		PUT: "smokeDetector"
 		]
 	}
+	path("/switch/:address/:group/:on_off/:channel") {
+		action: [
+		PUT: "Mswitch"
+		]
+	}
 	path("/:other/:id/:data") {
 		action: [
 		PUT: "other"
@@ -294,6 +299,40 @@ def smokeDetector() {
 		if (logEnable) log.debug("${newsmokeDetectorDevice.name} = $address, $value")
 
 		log.warn "New smoke detector device discovered and reporting detected: $id, $address, $value"
+	}
+}
+
+def Mswitch() {
+	def address = params.address
+	def group = params.group
+	def on_off = params.on_off
+	def channel = params.channel
+	def id = "$address$channel"
+
+	if (params.on_off == "1") {
+		on_off = "0"
+	} else if (params.on_off == "0") {
+		on_off = "1"
+	}
+
+	if (logEnable) log.debug("Switch event from ${address}: ${on_off} on channel: $channel, with group: $group")
+
+	def SwitchDevice = getChildDevices().find{it.deviceNetworkId == id}
+
+	if (SwitchDevice != null) {
+
+		SwitchDevice.setStatus(on_off)
+
+		if (logEnable) log.debug("${SwitchDevice.displayName} (${SwitchDevice.name}) = $address, $on_off, $group, $channel")
+
+	} else if (acceptNewDevices) {
+		def newSwitchDevice = addChildDevice("iholand", "Multisensor",  id, null, [name: id, componentName: id, componentLabel: id])
+
+		newSwitchDevice.setStatus(on_off)
+		if (logEnable) log.debug("${newSwitchDevice.name} = $address, $on_off, $group, $channel")
+
+	} else {
+		log.warn "New switch device attempting to connect: $address, $on_off, $group, $channel"
 	}
 }
 
