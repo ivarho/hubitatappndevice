@@ -43,6 +43,7 @@ metadata {
 		input "humidAtMax", "number", title: "Raw at max humid:"
 		input "humidAtMin", "number", title: "Raw at min himid:"
 		input name: "logEnable", type: "bool", title: "Enable debug logging", defaultValue: true
+		input name: "forceStateChangeOnTempChange", type: "bool", title: "Always treat temperature update as state change", defaultValue: false
 	}
 }
 
@@ -133,7 +134,7 @@ def setTemperature(temperature) {
 	// TODO: handle 'setTemperature' command
 
 	if (temperature > -60 && temperature < 300) {
-		sendEvent(name: "temperature", value: temperature.round(1), unit: "°C")
+		sendEvent(name: "temperature", value: temperature.round(1), unit: "°C", isStateChange: forceStateChangeOnTempChange)
 	}
 
 	if (temperature > state.maxTemp) {
