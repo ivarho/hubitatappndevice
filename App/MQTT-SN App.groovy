@@ -89,6 +89,18 @@ mappings {
 		PUT: "Mswitch"
 		]
 	}
+	path("/debug/:id/:message/:parameters") {
+		action: [
+			PUT: "debugMessage"
+		]
+	}
+
+	path("/debug/:id/:message") {
+		action: [
+			PUT: "debugMessage"
+		]
+	}
+
 	path("/:other/:id/:data") {
 		action: [
 		PUT: "other"
@@ -367,3 +379,10 @@ def getStatus() {
 	render contentType: "text/html", data: "$id/$sub_id/$pb0", status: 200
 }
 
+def debugMessage() {
+	def id = params.id
+	def message = params.message
+	def addparam = params.parameters
+
+	if (logEnable) log.debug("Debug message from: $id, $message, $addparam")
+}
