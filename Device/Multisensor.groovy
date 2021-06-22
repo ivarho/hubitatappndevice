@@ -28,6 +28,7 @@ metadata {
 		attribute "maxTemp", "number"
 		attribute "minTemp", "number"
 		attribute "s_address", "String"
+        attribute "raw_humid", "number"
 
 		command "setTemperature"
 		command "setBatteryVoltage"
@@ -44,6 +45,7 @@ metadata {
 		input "humidAtMin", "number", title: "Raw at min himid:"
 		input name: "logEnable", type: "bool", title: "Enable debug logging", defaultValue: true
 		input name: "forceStateChangeOnTempChange", type: "bool", title: "Always treat temperature update as state change", defaultValue: false
+		input name: "forceStateChangeOnCheckinChange", type: "bool", title: "Always treat checkin as state change", defaultValue: false
 	}
 }
 
@@ -111,7 +113,7 @@ def checked_in() {
 
 	def timeString = new Date().format("yyyy-MM-dd HH:mm:ss", location.timeZone)
 	if (logEnable) log.debug("$timeString")
-	//sendEvent(name: "lastCheckin", value: timeString, displayed: false)
+	if(forceStateChangeOnCheckinChange) sendEvent(name: "lastCheckin", value: timeString)
 
 	state.lastCheckin = timeString
 
@@ -154,7 +156,7 @@ def setTemperature(temperature) {
 def setBatteryVoltage(voltage) {
 	if (logEnable) log.debug "Executing 'setBatteryVoltage'";
 
-	bat_percentage = (voltage - 2500)/(3300-2500)*100.0
+	bat_percentage = (voltage - 2700)/(3255-2700)*100.0
 	bat_percentage = bat_percentage.toFloat()
 
 	sendEvent(name: "batteryVoltage", value: voltage)
