@@ -28,7 +28,9 @@ metadata {
 		attribute "maxTemp", "number"
 		attribute "minTemp", "number"
 		attribute "s_address", "String"
-        attribute "raw_humid", "number"
+		attribute "raw_humid", "number"
+		attribute "debugMsg", "String"
+		attribute "rssi", "number"
 
 		command "setTemperature"
 		command "setBatteryVoltage"
@@ -36,6 +38,8 @@ metadata {
 		command "resetMaxMin"
 		command "checked_in"
 		command "setStatus"
+		command "setDebugMessage"
+		command "setRSSI"
 	}
 
 	preferences {
@@ -199,6 +203,22 @@ def setStatus(status)
 	}
 
 	checked_in()
+}
+
+def setDebugMessage(message)
+{
+	if (logEnable) log.debug("Debug message: ${message}")
+
+	sendEvent(name: "debugMsg", value: message)
+
+	checked_in()
+}
+
+def setRSSI(rssi)
+{
+	if (logEnable) log.debug("Rssi: ${rssi}")
+
+	sendEvent(name: "rssi", value: rssi, unit: "dBm")
 }
 
 def timeoutHandler()

@@ -43,7 +43,18 @@ mappings {
 		PUT: "updateTemperature"
 		]
 	}
+	path("/temperature/:id/:temperature/:rssi") {
+		action: [
+		PUT: "updateTemperature"
+		]
+	}
 	path("/battery/:id/:voltage") {
+		action: [
+		PUT:"updateBattery",
+		POST:"updateBattery"
+		]
+	}
+	path("/battery/:id/:voltage/:rssi") {
 		action: [
 		PUT:"updateBattery",
 		POST:"updateBattery"
@@ -54,7 +65,17 @@ mappings {
 		PUT: "updateStatus"
 		]
 	}
+	path("/status/:id/:on_off/:rssi") {
+		action: [
+		PUT: "updateStatus"
+		]
+	}
 	path("/gstatus/:id/:sub_id") {
+		action: [
+		GET: "getStatus"
+		]
+	}
+	path("/gstatus/:id/:sub_id/:rssi") {
 		action: [
 		GET: "getStatus"
 		]
@@ -64,7 +85,17 @@ mappings {
 		PUT: "updateHumidity"
 		]
 	}
+	path("/humidity/:id/:humid/:raw/:rssi") {
+		action: [
+		PUT: "updateHumidity"
+		]
+	}
 	path("/humidity/:id/:humid") {
+		action: [
+		PUT: "updateHumidity"
+		]
+	}
+	path("/humidity/:id/:humid/:rssi") {
 		action: [
 		PUT: "updateHumidity"
 		]
@@ -84,9 +115,30 @@ mappings {
 		PUT: "smokeDetector"
 		]
 	}
+	path("/smokeD/:address/:value/:rssi") {
+		action: [
+		PUT: "smokeDetector"
+		]
+	}
 	path("/switch/:address/:group/:on_off/:channel") {
 		action: [
 		PUT: "Mswitch"
+		]
+	}
+	path("/switch/:address/:group/:on_off/:channel/:rssi") {
+		action: [
+		PUT: "Mswitch"
+		]
+	}
+
+	path("/debug/:id/:message/:parameters/:parameters2") {
+		action: [
+			PUT: "debugMessage"
+		]
+	}
+	path("/debug/:id/:message/:parameters/:parameters2/:rssi") {
+		action: [
+			PUT: "debugMessage"
 		]
 	}
 	path("/debug/:id/:message/:parameters") {
@@ -94,14 +146,27 @@ mappings {
 			PUT: "debugMessage"
 		]
 	}
-
+	path("/debug/:id/:message/:parameters/:rssi") {
+		action: [
+			PUT: "debugMessage"
+		]
+	}
 	path("/debug/:id/:message") {
 		action: [
 			PUT: "debugMessage"
 		]
 	}
-
+	path("/debug/:id/:message/:rssi") {
+		action: [
+			PUT: "debugMessage"
+		]
+	}
 	path("/:other/:id/:data") {
+		action: [
+		PUT: "other"
+		]
+	}
+	path("/:other/:id/:data/:rssi") {
 		action: [
 		PUT: "other"
 		]
@@ -158,15 +223,23 @@ void updateTemperature() {
 
 	def tempSensor = getChildDevices().find{it.deviceNetworkId == id}
 
+	if (params.rssi != null) {
+		rssi = (-100.0 + (params.rssi.toInteger() * 1.03))
+	} else {
+		rssi = 0
+	}
+
 	if (tempSensor != null) {
 		tempSensor.setTemperature(temperature)
+		tempSensor.setRSSI(rssi)
 		//tempSensor.sendEvent(name: "temperature", value: temperature)
-		if (logEnable) log.debug("${tempSensor.displayName} (${tempSensor.name}) = $temperature *C")
+		if (logEnable) log.debug("${tempSensor.displayName} (${tempSensor.name}) = $temperature *C, RSSI = $rssi")
 	} else if (acceptNewDevices) {
 		def newTempSensor = addChildDevice("iholand", "Multisensor",  id, null, [name: id, componentName: id, componentLabel: id])
 		newTempSensor.setTemperature(temperature)
+		newTempSensor.setRSSI(rssi)
 		//newTempSensor.sendEvent(name: "temperature", value: temperature)
-		if (logEnable) log.debug("${newTempSensor.name}) = $temperature *C")
+		if (logEnable) log.debug("${newTempSensor.name}) = $temperature *C, RSSI = $rssi")
 	} else {
 		log.warn "New temperature device attempting to connect: $id, $temperature"
 	}
@@ -178,12 +251,20 @@ def updateBattery() {
 
 	def tempSensor = getChildDevices().find{it.deviceNetworkId == id}
 
+	if (params.rssi != null) {
+		rssi = (-100.0 + (params.rssi.toInteger() * 1.03))
+	} else {
+		rssi = 0
+	}
+
 	if (tempSensor != null) {
 		tempSensor.setBatteryVoltage(voltage)
-		if (logEnable) log.debug("${tempSensor.displayName} (${tempSensor.name}) = $voltage mV")
+		tempSensor.setRSSI(rssi)
+		if (logEnable) log.debug("${tempSensor.displayName} (${tempSensor.name}) = $voltage mV, RSSI = $rssi")
 	} else if (acceptNewDevices) {
 		def newTempSensor = addChildDevice("iholand", "Multisensor",  id, null, [name: id, componentName: id, componentLabel: id])
 		newTempSensor.setBatteryVoltage(voltage)
+		newTempSensor.setRSSI(rssi)
 		if (logEnable) log.debug("${newTempSensor.name} = $voltage mV")
 	} else {
 		log.warn "New battery device attempting to connect: $id, $voltage"
@@ -200,15 +281,23 @@ void updateHumidity() {
 		raw = 9999;
 	}
 
+	if (params.rssi != null) {
+		rssi = (-100.0 + (params.rssi.toInteger() * 1.03))
+	} else {
+		rssi = 0
+	}
+
 	def Sensor = getChildDevices().find{it.deviceNetworkId == id}
 
 	if (Sensor != null) {
 		Sensor.setHumidity(humid, raw)
-		 if (logEnable) log.debug("${Sensor.displayName} (${Sensor.name}) = $humid %, $raw")
+		Sensor.setRSSI(rssi)
+		 if (logEnable) log.debug("${Sensor.displayName} (${Sensor.name}) = $humid %, $raw, RSSI = $rssi")
 
 	} else if (acceptNewDevices) {
 		def newSensor = addChildDevice("iholand", "Multisensor",  id, null, [name: id, componentName: id, componentLabel: id])
 		newSensor.setHumidity(humid, raw)
+		newSensor.setRSSI(rssi)
 		if (logEnable) log.debug("${newSensor.name} = $humid %")
 	} else {
 		log.warn "New humid device attempting to connect: $id, $humid"
@@ -362,7 +451,11 @@ def getStatus() {
 	def id = params.id
 	def sub_id = params.sub_id
 
-	if (logEnable) log.debug("Device requesting status: $id, $sub_id")
+	if (params.rssi != null) {
+		rssi = (-100.0 + (params.rssi.toInteger() * 1.03))
+	} else {
+		rssi = 0
+	}
 
 	def device = getChildDevices().find{it.deviceNetworkId == id}
 
@@ -374,6 +467,8 @@ def getStatus() {
 		pb0 = 1
 	}
 
+	if (logEnable) log.debug("Device: ${device.displayName} (${device.name}) requesting status on channel $sub_id, will return: $id/$sub_id/$pb0, RSSI = $rssi")
+
 	device.checked_in()
 
 	render contentType: "text/html", data: "$id/$sub_id/$pb0", status: 200
@@ -383,6 +478,30 @@ def debugMessage() {
 	def id = params.id
 	def message = params.message
 	def addparam = params.parameters
+	def addparam2 = params.parameters2
 
-	if (logEnable) log.debug("Debug message from: $id, $message, $addparam")
+	if (params.rssi != null) {
+		rssi = (-100.0 + (params.rssi.toInteger() * 1.03))
+	} else {
+		rssi = 0
+	}
+
+	def DebugDevice = getChildDevices().find{it.deviceNetworkId == id}
+
+	if (DebugDevice != null) {
+
+		DebugDevice.setDebugMessage("${message}, ${addparam}, ${addparam2}")
+		DebugDevice.setRSSI(rssi)
+
+		if (logEnable) log.debug("${DebugDevice.displayName} (${DebugDevice.name}) = $id, $message, $addparam, $addparam2, RSSI = $rssi")
+
+	} else if (acceptNewDevices) {
+		def newDebugDevice = addChildDevice("iholand", "Multisensor",  id, null, [name: id, componentName: id, componentLabel: id])
+
+		newDebugDevice.setStatus(on_off)
+		if (logEnable) log.debug("${newDebugDevice.name} = $id, $message, $addparam, $addparam2")
+
+	} else {
+		log.warn("New device debug message from: $id, $message, $addparam, $addparam2")
+	}
 }
