@@ -94,10 +94,6 @@ def initialize() {
 	// Turn off logs after 30 min
 	if (enableDebug) runIn(30*60, logsOff)
 
-	// Define Globals
-	state.globalTempIn = 0
-	state.globalTempOut = 0
-
 	CalculateCoolingEffect()
 }
 
