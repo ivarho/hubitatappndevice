@@ -28,8 +28,8 @@ metadata {
 	}
 
 	preferences {
-		input name: "tibber_apikey", type: "password", title: "API Key", description: "Enter the Tibber API key", required: true, displayDuringSetup: true
-		input name: "tibber_homeId", type: "text", title: "homeId", description: "Enter the Tibber homeId", required: true, displayDuringSetup: true
+		input name: "tibber_apikey", type: "password", title: "API Key", description: "Enter the Tibber API key.<p><i>This can be found on https://developer.tibber.com/explorer. Sign in and click Load Personal Token.</i></p>", required: true, displayDuringSetup: true
+		input name: "tibber_homeId", type: "text", title: "homeId", description: "Enter the Tibber homeId: <p><i>This can be found on https://developer.tibber.com/explorer. Open the Real time subscription example, homeId should be on the left.</i></p>", required: true, displayDuringSetup: true
 
 		input name: "logEnable", type: "bool", title: "Enable debug logging", defaultValue: true
 	}
