@@ -23,6 +23,9 @@ metadata {
 		capability "PowerMeter"
 		capability "Switch"
 
+		attribute "available_power", "number"
+		attribute "available_power_w_unit", "String"
+
 		command "connectSocket"
 		command "closeSocket"
 	}
@@ -30,6 +33,7 @@ metadata {
 	preferences {
 		input name: "tibber_apikey", type: "password", title: "API Key", description: "Enter the Tibber API key.<p><i>This can be found on https://developer.tibber.com/explorer. Sign in and click Load Personal Token.</i></p>", required: true, displayDuringSetup: true
 		input name: "tibber_homeId", type: "text", title: "homeId", description: "Enter the Tibber homeId: <p><i>This can be found on https://developer.tibber.com/explorer. Open the Real time subscription example, homeId should be on the left.</i></p>", required: true, displayDuringSetup: true
+		input name: "threshold", type: "number", title: "Limit hour average to:", default: 5000
 
 		input name: "logEnable", type: "bool", title: "Enable debug logging", defaultValue: true
 	}
@@ -48,10 +52,14 @@ def parse(description) {
 		def timestamp_str = object.payload.data.liveMeasurement.timestamp
 
 		def minutes_into_hour = timestamp_str.split("T")[1].split(":")[1] as int
-		def estimated_rem_consumption = (power/60 * (59-minutes_into_hour))/1000
+		def estimated_rem_consumption = (power/60 * (60-minutes_into_hour))/1000
 
 		def hour_estimated_consumption = (estimated_rem_consumption + accumulatedConsumptionLastHour).toFloat()
 
+		def available_power_to_limit = (threshold-hour_estimated_consumption*1000)/((60-minutes_into_hour)/60)
+
+		sendEvent(name:"available_power", value:available_power_to_limit.round())
+		sendEvent(name:"available_power_w_unit", value:"Available:<br>${available_power_to_limit.round()} W")
 		sendEvent(name:"energy", value:hour_estimated_consumption.round(3), unit:"kWh")
 		sendEvent(name:"power", value:power, unit:"W")
 	}
