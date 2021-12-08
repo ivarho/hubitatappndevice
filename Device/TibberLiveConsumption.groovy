@@ -56,6 +56,10 @@ def parse(description) {
 
 		def hour_estimated_consumption = (estimated_rem_consumption + accumulatedConsumptionLastHour).toFloat()
 
+        if (threshold == null) {
+			threshold = 5000
+		}
+
 		def available_power_to_limit = (threshold-hour_estimated_consumption*1000)/((60-minutes_into_hour)/60)
 
 		sendEvent(name:"available_power", value:available_power_to_limit.round())
