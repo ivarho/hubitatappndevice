@@ -1,5 +1,5 @@
 /**
- * Copyright 2021 Ivar Holand
+ * Copyright 2021-2022 Ivar Holand
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,6 +12,11 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Change log:
+ * - Added a motion detector output as indication of over consumption
+ * - Added setting for controlling run time, i.e. continuous, every 5 min etc.
+ *    Auto reconnect added.
  */
 
 import groovy.json.JsonSlurper
@@ -36,6 +41,7 @@ metadata {
 		input name: "tibber_apikey", type: "password", title: "API Key", description: "Enter the Tibber API key.<p><i>This can be found on https://developer.tibber.com/explorer. Sign in and click Load Personal Token.</i></p>", required: true, displayDuringSetup: true
 		input name: "tibber_homeId", type: "text", title: "homeId", description: "Enter the Tibber homeId: <p><i>This can be found on https://developer.tibber.com/explorer. Open the Real time subscription example, homeId should be on the left.</i></p>", required: true, displayDuringSetup: true
 		input name: "threshold", type: "number", title: "Limit hour average to:", default: 5000
+		input name: "run_config", type: "enum", title: "Configure run schedule:", options: [1:"Continuous without auto reconnect", 2:"Continuous with auto reconnect", 3: "Every 3 min", 5: "Every 5 min", 10: "Every 10 min", 15: "Every 15 min", 20: "Every 20 min", 30: "Every 30 min"]
 
 		input name: "logEnable", type: "bool", title: "Enable debug logging", defaultValue: true
 	}
@@ -74,6 +80,10 @@ def parse(description) {
 		sendEvent(name:"available_power_w_unit", value:"Available:<br>${available_power_to_limit.round()} W")
 		sendEvent(name:"energy", value:hour_estimated_consumption.round(3), unit:"kWh")
 		sendEvent(name:"power", value:power, unit:"W")
+
+		if (run_config.toInteger() > 2) {
+			closeSocket()
+		}
 	}
 }
 
@@ -84,8 +94,16 @@ def webSocketStatus(String message) {
 		sendEvent(name:"switch", value:"on")
 	}
 
-	if (message == "status: closing" || message == "failure: null") {
+	if (message == "status: closing") {
 		sendEvent(name:"switch", value:"off")
+	}
+
+	if (message == "failure: null")  {
+		sendEvent(name:"switch", value:"off")
+
+		if (run_config == 2) {
+			runIn(30, connectSocket)
+		}
 	}
 }
 
@@ -103,7 +121,17 @@ def updated(settings) {
 
 	closeSocket()
 
-	connectSocket()
+	unschedule()
+
+	if (run_config.toInteger() > 2) {
+		//Schedule run
+
+		schedule("0 */${run_config} * ? * *", connectSocket)
+		connectSocket()
+
+	} else {
+		connectSocket()
+	}
 }
 
 def closeSocket() {
