@@ -17,6 +17,9 @@
  * - Added a motion detector output as indication of over consumption
  * - Added setting for controlling run time, i.e. continuous, every 5 min etc.
  *    Auto reconnect added.
+ *
+ * User guide in Norwegian:
+ * https://github.com/ivarho/hubitatappndevice/raw/master/Device/TibberLiveConsumption/Hvordan%20f%C3%A5%20live%20str%C3%B8mforbruk%20fra%20Tibber%20Pulse%20i%20Hubitat.pdf
  */
 
 import groovy.json.JsonSlurper
