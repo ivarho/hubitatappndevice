@@ -22,6 +22,8 @@ metadata {
 		capability "EnergyMeter"
 		capability "PowerMeter"
 		capability "Switch"
+		// Use this to indicate over consumption = active, ok = inactive
+		capability "MotionSensor"
 
 		attribute "available_power", "number"
 		attribute "available_power_w_unit", "String"
@@ -56,11 +58,17 @@ def parse(description) {
 
 		def hour_estimated_consumption = (estimated_rem_consumption + accumulatedConsumptionLastHour).toFloat()
 
-        if (threshold == null) {
+		if (threshold == null) {
 			threshold = 5000
 		}
 
 		def available_power_to_limit = (threshold-hour_estimated_consumption*1000)/((60-minutes_into_hour)/60)
+
+		if (available_power_to_limit < 0) {
+			sendEvent(name:"motion", value:"active")
+		} else {
+			sendEvent(name:"motion", value:"inactive")
+		}
 
 		sendEvent(name:"available_power", value:available_power_to_limit.round())
 		sendEvent(name:"available_power_w_unit", value:"Available:<br>${available_power_to_limit.round()} W")
@@ -91,7 +99,8 @@ def connectSocket() {
 }
 
 def updated(settings) {
-	log.debug "updated"
+	log.debug "updated with settings: ${settings}"
+
 	closeSocket()
 
 	connectSocket()
