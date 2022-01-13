@@ -1,5 +1,5 @@
 /**
- * Copyright 2020 Ivar Holand
+ * Copyright 2020-2022 Ivar Holand
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -41,6 +41,8 @@ preferences {
 		input "devId", "text", title: "Device ID:", required: false
 		input "localKey", "text", title: "Device local key:", required: false
 		input name: "logEnable", type: "bool", title: "Enable debug logging", defaultValue: true
+		input name: "sirenSound", type: "enum", title: "Select sound for siren:", options : [1: "1", 2: "2", 3: "3", 4: "4", 5: "5", 6: "6", 7: "7", 8: "8", 9: "9", 10: "10"], defaultValue: 1
+		input name: "strobeSound", type: "enum", title: "Select sound for strobe:", options : [1: "1", 2: "2", 3: "3", 4: "4", 5: "5", 6: "6", 7: "7", 8: "8", 9: "9", 10: "10"], defaultValue: 1
 	}
 }
 
@@ -327,6 +329,8 @@ def both() {
 }
 
 def siren() {
+	setSirenType(sirenSound)
+
 	def buf = generate_payload("set", ["104":true])
 
 	send(buf)
@@ -337,5 +341,13 @@ def siren() {
 }
 
 def strobe() {
-	// No strobe
+	setSirenType(strobeSound)
+
+	def buf = generate_payload("set", ["104":true])
+
+	send(buf)
+
+	// Poll for status change
+	runIn(1, status)
+	runIn(device.currentValue("sirenLength").toInteger(), afterStatus)
 }
