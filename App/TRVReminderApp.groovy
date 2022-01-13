@@ -1,7 +1,7 @@
 /**
  *  TRV reminder app
  *
- *  Copyright 2020 Ivar Holand
+ *  Copyright 2020-2022 Ivar Holand
  *
  *  Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
  *  in compliance with the License. You may obtain a copy of the License at:
@@ -46,13 +46,13 @@ def updated() {
 }
 
 def initialize() {
-	log.debug trvReader.currentValue("wastetype")
+	log.debug trvReader.currentValue("wastetype_raw")
 
 	schedule("0 0 21 ? * WED", reminderHandler)
 }
 
 def reminderHandler() {
-	def wastetype = trvReader.currentValue("wastetype")
+	def wastetype = trvReader.currentValue("wastetype_raw")
 
 	def message = "Informasjonsmelding: husk søppelbøtte, ${wastetype} denne uken."
 

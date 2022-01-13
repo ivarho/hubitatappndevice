@@ -1,7 +1,7 @@
 /**
  *  TRV - leser
  *
- *  Copyright 2020 Ivar Holand
+ *  Copyright 2020-2022 Ivar Holand
  *
  *  Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
  *  in compliance with the License. You may obtain a copy of the License at:
@@ -18,8 +18,10 @@ metadata {
 		capability "Sensor"
 
 		attribute "wastetype", "string"
+		attribute "wastetype_raw", "string"
 
 		command "updateWasteType"
+		command "getWasteType"
 	}
 }
 
@@ -52,11 +54,26 @@ def parse(description, data) {
 	def tbody_start = page_content.indexOf("<tbody>")
 	page_content = page_content[tbody_start..-1]
 
-	def pointer = page_content.indexOf("wastetype") + 10
-	def end_pointer = page_content.indexOf("href") - 4
+	def pointer = page_content.indexOf("wastetype") + 15
+	def end_pointer = page_content.indexOf("href") - 3
 	wType = page_content[pointer..end_pointer]
 
-	sendEvent(name: "wastetype", value: wType.capitalize(), isStateChange: true)
+	def img_src = ""
+
+	//if week is Tommefri
+	if (wType == "fri-uke ") {
+		img_src = "https://upload.wikimedia.org/wikipedia/commons/thumb/8/80/Icon_no.svg/16px-Icon_no.svg.png"
+		wType = "tømmefri"
+	} else {
+		//Find ICON link
+		page_content = page_content[end_pointer..-1]
+		def img_src_ptr = page_content.indexOf("img src") + 9
+		def img_src_end_ptr = page_content.indexOf("/span") - 4
+		img_src = page_content[img_src_ptr..img_src_end_ptr]
+	}
+
+	sendEvent(name: "wastetype", value: "<img src=\"${img_src}\" width=70 style=\"opacity:0.7;\"><br>" + wType.capitalize(), isStateChange: true)
+	sendEvent(name: "wastetype_raw", value: wType.capitalize(), isStateChange: true)
 
 	log.debug "Parsing '${wType}'"
 }
