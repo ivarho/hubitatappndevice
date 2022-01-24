@@ -1,5 +1,5 @@
 /**
- * Copyright 2020 Ivar Holand
+ * Copyright 2020-2022 Ivar Holand
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -31,6 +31,7 @@ preferences {
 		input "localKey", "text", title: "Device local key:", required: false
 		input name: "logEnable", type: "bool", title: "Enable debug logging", defaultValue: true
 		input "endpoint", "text", title: "End point to control: ", required: true
+		input "tuyaProtVersion", "enum", title: "Select tuya protocol version: ", required: true, options: [31: "3.1", 33 : "3.3"]
 	}
 }
 
@@ -48,9 +49,9 @@ def updated() {
 }
 
 def parse(String description) {
+	if (logEnable) log.debug "Receiving message from device"
 	if (logEnable) log.debug(description)
 	if (logEnable) log.debug(description)
-	if (logEnable) log.debug "Here"
 
 	byte[] msg_byte = hubitat.helper.HexUtils.hexStringToByteArray(description)
 
@@ -116,7 +117,7 @@ import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.Cipher
 
 // do the magic
-def encrypt (def plainText, def secret) {
+def encrypt (def plainText, def secret, encodeB64=true) {
 	//if (logEnable) log.debug ("Encrypting - ${plainText}","trace")
 	// this particular magic sauce pads the payload to 128 bits per chunk
 	// even though that shouldn't work with S5Padding....
@@ -126,7 +127,16 @@ def encrypt (def plainText, def secret) {
 	// initialize the encryption and get ready for that dirty dirty magic
 	cipher.init(Cipher.ENCRYPT_MODE, key)
 	// boom goes the dynamite
-	def result = cipher.doFinal(plainText.getBytes("UTF-8")).encodeBase64().toString()
+
+	def result
+
+	if (encodeB64) {
+		result = cipher.doFinal(plainText.getBytes("UTF-8")).encodeBase64().toString()
+	} else {
+		result = cipher.doFinal(plainText.getBytes("UTF-8")).encodeHex().toString()
+	}
+
+	log.debug result
 
 	return result
 }
@@ -200,14 +210,16 @@ def generate_payload(command, data=null) {
 
 	json json_data
 
+	if (logEnable) log.debug tuyaProtVersion
+
 	json_payload = groovy.json.JsonOutput.toJson(json.toString())
 	json_payload = json_payload.replaceAll("\\\\", "")
 	json_payload = json_payload.replaceFirst("\"", "")
 	json_payload = json_payload[0..-2]
 
-	if (logEnable) log.debug json_payload
+	if (logEnable) log.debug "payload before=" + json_payload
 
-	if (command == "set") {
+	if (command == "set" && tuyaProtVersion == "31") {
 		encrypted_payload = encrypt(json_payload, settings.localKey)
 
 		if (logEnable) log.debug encrypted_payload
@@ -221,18 +233,32 @@ def generate_payload(command, data=null) {
 		hexdig = new String(hexdigest[8..-9].getBytes("UTF-8"), "ISO-8859-1")
 
 		json_payload = "3.1" + hexdig + encrypted_payload
+	} else if (command == "set" && tuyaProtVersion == "33") {
+		encrypted_payload = encrypt(json_payload, settings.localKey, false)
+
+		if (logEnable) log.debug encrypted_payload
+
+		json_payload = "3.3" + "\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000" + encrypted_payload
+
 	}
 
-	if (logEnable) log.debug json_payload
+	if (logEnable) log.debug "payload after=" + json_payload
 
 	ByteArrayOutputStream output = new ByteArrayOutputStream()
 
-	output.write(json_payload.getBytes())
+	if (tuyaProtVersion == "31") {
+		output.write(json_payload.getBytes())
+	} else if (tuyaProtVersion == "33") {
+		output.write("3.3".getBytes())
+		output.write("\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000".getBytes())
+		output.write(hubitat.helper.HexUtils.hexStringToByteArray(encrypted_payload))
+	}
+
 	output.write(hubitat.helper.HexUtils.hexStringToByteArray(payload()["device"]["suffix"]))
 
 	byte[] bff = output.toByteArray()
 
-	//if (logEnable) log.debug hubitat.helper.HexUtils.byteArrayToHexString(bff)
+	if (logEnable) log.debug hubitat.helper.HexUtils.byteArrayToHexString(bff)
 
 	postfix_payload = bff
 
@@ -304,9 +330,22 @@ def on() {
 	interfaces.rawSocket.sendMessage(msg)
 
 	// Check Status
-	runIn(1, status)
+	//runIn(1, status)
 }
 
 def off() {
 	sendEvent(name: "switch", value : "off", isStateChange : true)
+
+	def buf = generate_payload("set", ["${settings.endpoint}":false])
+
+	if (logEnable) log.debug hubitat.helper.HexUtils.byteArrayToHexString(buf)
+
+	String msg = hubitat.helper.HexUtils.byteArrayToHexString(buf)
+
+	//port 6668
+	interfaces.rawSocket.connect(settings.ipaddress, 6668, byteInterface: true, readDelay: 500)
+	interfaces.rawSocket.sendMessage(msg)
+
+	// Check Status
+	//runIn(1, status)
 }
