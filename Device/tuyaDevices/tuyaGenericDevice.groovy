@@ -51,35 +51,69 @@ def updated() {
 def parse(String description) {
 	if (logEnable) log.debug "Receiving message from device"
 	if (logEnable) log.debug(description)
-	if (logEnable) log.debug(description)
 
 	byte[] msg_byte = hubitat.helper.HexUtils.hexStringToByteArray(description)
 
-	String status = new String(msg_byte, "ASCII")
+	String status = new String(msg_byte, "UTF-8")
+
+	//def status = msg_byte.toString()
 
 	status = status[20..-1]
 
 	if (logEnable) log.debug status
 
-	if (status.startsWith("{")) {
+	if (!status.startsWith("{")) {
+		// Encrypted message incoming, decrypt first
 
-		def jsonSlurper = new groovy.json.JsonSlurper()
+		if (logEnable) log.debug "Incoming message: "+ hubitat.helper.HexUtils.byteArrayToHexString(msg_byte)
+
+		if (logEnable) log.debug "Bytes incoming: " + msg_byte.size()
+
+		def end_of_message = 0
+
+		for (u = 63; u < msg_byte.size()-1; u++) {
+			if (msg_byte[u] == (byte)0xAA && msg_byte[u+1] == (byte)0x55) {
+				//msg end found
+				log.debug "End of message: ${u-63-6}"
+				end_of_message = u-63-6
+				break
+			}
+		}
+
+		ByteArrayOutputStream output = new ByteArrayOutputStream()
+		for (i = 63; i < end_of_message+63; i++) {
+			output.write(msg_byte[i])
+		}
+
+
+
+
+		//while (missing_bytes--) {
+		//	output.write(n++)
+		//}
+
+		byte[] payload = output.toByteArray()
+
+		if (logEnable) log.debug "Payload: "+ hubitat.helper.HexUtils.byteArrayToHexString(payload)
+
+		//pad missing
+
+
+
+		def dec_status = decrypt_bytes(payload, settings.localKey)
+		if (logEnable) log.debug "Decryted message: ${dec_status}"
+
+		status = dec_status
+	}
+
+	def jsonSlurper = new groovy.json.JsonSlurper()
 		def status_object = jsonSlurper.parseText(status)
 
 
-		if (status_object.dps[endpoint] == true) {
-			sendEvent(name: "switch", value : "on", isStateChange : true)
-		} else {
-			sendEvent(name: "switch", value : "off", isStateChange : true)
-		}
+	if (status_object.dps[endpoint] == true) {
+		sendEvent(name: "switch", value : "on", isStateChange : true)
 	} else {
-		// Does not work
-		status = status[24..-1]
-		status = status[3+16..-41]
-		if (logEnable) log.debug "Encryted message: $status"
-
-		dec_status = decrypt(status, settings.localKey)
-		if (logEnable) log.debug "Decryted message: ${dec_status.getBytes()}"
+		sendEvent(name: "switch", value : "off", isStateChange : true)
 	}
 
 	try {
@@ -147,11 +181,14 @@ def decrypt (def cypherText, def secret) {
 	// this was so much easier to get done than the encryption.  It works.  Don't touch it
 	// cereal.  you will regret it.
 
+	if (logEnable) log.debug cypherText
+
 	// drop those beats..or bytes.
-	byte[] decodedBytes = cypherText.getBytes("UTF-8")
+	byte[] decodedBytes = cypherText.getBytes()
+	if (logEnable) log.debug hubitat.helper.HexUtils.byteArrayToHexString(decodedBytes)
 	//log("decodedBytes:   ${decodedBytes}", "trace")
 	// no whammy no whammy no whammy.......
-	def cipher = Cipher.getInstance("AES/ECB/PKCS5Padding")
+	def cipher = Cipher.getInstance("AES/ECB/PKCS5Padding ")
 	SecretKeySpec key = new SecretKeySpec(secret.getBytes("UTF-8"), "AES")
 	cipher.init(Cipher.DECRYPT_MODE, key)
 
@@ -159,6 +196,34 @@ def decrypt (def cypherText, def secret) {
 	//whammy!
 	return new String(cipher.doFinal(decodedBytes), "UTF-8")
 }
+
+// undo the magic
+def decrypt_bytes (byte[] cypherBytes, def secret) {
+	//log ("Decrypting - ${cypherText}","trace")
+	// this was so much easier to get done than the encryption.  It works.  Don't touch it
+	// cereal.  you will regret it.
+
+	// drop those beats..or bytes.
+	//byte[] decodedBytes = cypherText.getBytes("ASCII")
+	if (logEnable) log.debug hubitat.helper.HexUtils.byteArrayToHexString(cypherBytes)
+	//log("decodedBytes:   ${decodedBytes}", "trace")
+	// no whammy no whammy no whammy.......
+	def cipher = Cipher.getInstance("AES/ECB/PKCS5Padding ")
+	SecretKeySpec key = new SecretKeySpec(secret.getBytes(), "AES")
+
+	//log.debug secret.getBytes("UTF-8")
+
+	cipher.init(Cipher.DECRYPT_MODE, key)
+
+	if (logEnable) log.debug cypherBytes.size()
+
+	//cipher.update(cypherBytes)
+	def result = cipher.doFinal(cypherBytes)
+
+	//whammy!
+	return new String(result, "UTF-8")
+}
+
 
 import java.security.MessageDigest
 
@@ -317,7 +382,7 @@ def status() {
 
 def on() {
 
-	sendEvent(name: "switch", value : "on", isStateChange : true)
+	//sendEvent(name: "switch", value : "on", isStateChange : true)
 
 	def buf = generate_payload("set", ["${settings.endpoint}":true])
 
@@ -334,7 +399,7 @@ def on() {
 }
 
 def off() {
-	sendEvent(name: "switch", value : "off", isStateChange : true)
+	//sendEvent(name: "switch", value : "off", isStateChange : true)
 
 	def buf = generate_payload("set", ["${settings.endpoint}":false])
 
