@@ -46,13 +46,13 @@ Here is an example of data coming from the device:
 ```
 000055AA00000000000000 07 000000 87 332E33 000000000000000000000000 B36A6A20ABFA7...228B 4B593276 0000AA55
 ````
-Message prefix same for all: ```000055AA00000000000000```
-Message command (0A = "status", 07 = "set"...): ```07```
-6 x zero: ```000000```
-Protocol version (in "clear" text): ```332E33 = "3.3"```
-Encrypted payload: ```B36A6A20ABFA7...228B = {"devId":"02...d1","dps":{"1":false},"t":1643297709}```
-CRC32: ```4B593276```
-Postfix: ```0000AA55```
+- Message prefix same for all: ```000055AA00000000000000```
+- Message command (0A = "status", 07 = "set"...): ```07 = "set"```
+- 6 x zero: ```000000```
+- Protocol version (in "clear" text): ```332E33 = "3.3"```
+- Encrypted payload: ```B36A6A20ABFA7...228B = {"devId":"02...d1","dps":{"1":false},"t":1643297709}```
+- CRC32: ```4B593276```
+- Postfix: ```0000AA55```
 
 > As far as I can see "set"  message replies contains the version "field" however, "status" messages does not, so I do not have a more elegant way of determining the version on the "status" messages other than clear text meaning 3.1, and encrypted meaning 3.3.
 
