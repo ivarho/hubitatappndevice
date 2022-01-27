@@ -76,13 +76,13 @@ I.e. it has 4 endpoints, and I have found the following meaning for these:
 
 Under is a list of my interpretation of the different sounds on the siren (mostly for my own documentation)
 
-1 - "Car alarm"
-2 - "Tornado warning...?"
-3 - "Wiiiiuuuu wiiiuuuu"
-4 - "Door bell"
-5 - "Police siren?"
-6 - "Bell"
-7 - "Burglar alarm gone mad...?"
-8 - "American fire truck horn"
-9 - "Production line down"
-10 - "Burglar alarm" (more conventional)
+1. "Car alarm"
+2. "Tornado warning...?"
+3. "Wiiiiuuuu wiiiuuuu"
+4. "Door bell"
+5. "Police siren?"
+6. "Bell"
+7. "Burglar alarm gone mad...?"
+8. "American fire truck horn"
+9. "Production line down"
+10. "Burglar alarm" (more conventional)
