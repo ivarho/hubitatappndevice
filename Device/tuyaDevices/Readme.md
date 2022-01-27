@@ -24,7 +24,7 @@ You need to get the device id, device key, device local ip-address, and device e
 9. In Hubitat, open "Devices", then click "Add Device", and "</>Virtual".
 10. Give the device a Device Name" and select the Type: "tuya Generic Device", and click "Save Device"
 11. Now, add the "Device IP", "Device ID", "Device local Key" and select the tuya protocol version that you got from point 6.
-12. Lastly set the End point you want to control. During step 6 you should see something called "Status" together with each device, something like this: ```Status: {'1': False, '2': False, '3': False, '5': 0}```, the end points are the numbers in front of the ```False```. This status block is for a "Three gang switch", where each number corresponds to a button on the switch. End point 5 control all buttons on/off. More on endpoints under the Wifi Siren section
+12. Lastly set the Endpoint you want to control. During step 6 you should see something called "Status" together with each device, something like this: ```Status: {'1': False, '2': False, '3': False, '5': 0}```, the endpoints are the numbers in front of the ```False```. This status block is for a "Three gang switch", where each number corresponds to a button on the switch. Endpoint 5 control all buttons on/off. More on endpoints under the Wifi Siren section
 13. Click "Save Preferences"
 14. You should now be able to control your tuya device via Hubitat on local network only.
 
@@ -40,7 +40,7 @@ I have seen tuya protocols being version 3.1 (my first device), and 3.3 my secon
 Version 3.1 is a somewhat complicated implementation of the protocol. When creating the encrypted message to send to the device there is a lot of steps involved, e.g. m5sum of the entire message is embedded into the message itself. And some of the data is base64 encoded, and some not, so it is a bit challenging to encode and decode. The nice thing however is that it sends status messages in clear text so it is easier to poke the device to verify that it is alive (v 3.3 of the protocol encrypts everything). Controlling the device require the message to be encrypted, and the device also answer encrypted. However, requesting status, the messages comes through as clear text.
 
 ### Version 3.3 Protocol
-Version 3.3 of the tuya protocol is somewhat cleaner, everything is encrypted in both directions. Hence, you have to have a correct key to be able to see any readable data from the device. They are removed all the md5sum, base64 encoding etc. which makes for a simpler implementation.
+Version 3.3 of the tuya protocol is somewhat cleaner, everything is encrypted in both directions. Hence, you have to have a correct key to be able to see any readable data from the device. They have removed all the md5sum, base64 encoding etc. which makes for a simpler implementation.
 
 Here is an example of data coming from the device:
 ```
