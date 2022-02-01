@@ -147,93 +147,33 @@ def parse(String description) {
 	}
 }
 
-def payload()
-{
-	def payload_dict = [
-		"device": [
-			"status": [
-				"hexByte": "0a",
-				"command": ["devId": "", "gwId": "", "uid":"", "t": ""]
-			],
-			"set": [
-				"hexByte": "07",
-				"command": ["devId":"", "uid": "", "t": ""]
-			],
-			"prefix": "000055aa00000000000000",
-			"suffix": "000000000000aa55"
-		]
-	]
-
-	return payload_dict
+def status() {
+	send(generate_payload("status"))
 }
 
-// Huge thank you to MrYutz for posting Groovy AES ecryption drivers for groovy
-//https://community.hubitat.com/t/groovy-aes-encryption-driver/31556
+def on() {
+	send(generate_payload("set", ["${settings.endpoint}":true]))
+}
 
-import javax.crypto.spec.SecretKeySpec;
-import javax.crypto.spec.IvParameterSpec;
-import javax.crypto.Cipher
+def off() {
+	send(generate_payload("set", ["${settings.endpoint}":false]))
+}
 
-// Encrypt plain text v. 3.1 uses base64 encoding, while 3.3 does not
-def encrypt (def plainText, def secret, encodeB64=true) {
+import hubitat.device.HubAction
+import hubitat.device.Protocol
 
-	// Encryption is AES in ECB mode, pad using PKCS5Padding as needed
-	def cipher = Cipher.getInstance("AES/ECB/PKCS5Padding ")
-	SecretKeySpec key = new SecretKeySpec(secret.getBytes("UTF-8"), "AES")
+def send(byte[] message) {
+	String msg = hubitat.helper.HexUtils.byteArrayToHexString(message)
 
-	// Give the encryption engine the encryption key
-	cipher.init(Cipher.ENCRYPT_MODE, key)
+	if (logEnable) log.debug "Sending message to " + settings.ipaddress + ":" + 6668 + " msg: " + msg
 
-	def result = ""
-
-	if (encodeB64) {
-		result = cipher.doFinal(plainText.getBytes("UTF-8")).encodeBase64().toString()
-	} else {
-		result = cipher.doFinal(plainText.getBytes("UTF-8")).encodeHex().toString()
+	try {
+		//port 6668
+		interfaces.rawSocket.connect(settings.ipaddress, 6668, byteInterface: true, readDelay: 500)
+		interfaces.rawSocket.sendMessage(msg)
+	} catch (e) {
+		log.error "Error $e"
 	}
-
-	return result
-}
-
-// Decrypt ByteArray
-def decrypt_bytes (byte[] cypherBytes, def secret, decodeB64=false) {
-	if (logEnable) log.debug "*********** Decrypting **************"
-
-	def cipher = Cipher.getInstance("AES/ECB/PKCS5Padding ")
-	SecretKeySpec key = new SecretKeySpec(secret.getBytes(), "AES")
-
-	cipher.init(Cipher.DECRYPT_MODE, key)
-
-	if (decodeB64) {
-		cypherBytes = cypherBytes.decodeBase64()
-	}
-
-	def result = cipher.doFinal(cypherBytes)
-
-	return new String(result, "UTF-8")
-}
-
-
-import java.security.MessageDigest
-
-def generateMD5(String s){
-	MessageDigest.getInstance("MD5").digest(s.bytes).encodeHex().toString()
-}
-
-def CRC32b(bytes, length) {
-	crc = 0xFFFFFFFF
-
-	for (i = 0; i < length; i++) {
-		b = Byte.toUnsignedInt(bytes[i])
-
-		crc = crc ^ b
-		for (j = 7; j >= 0; j--) {
-			mask = -(crc & 1)
-			crc = (crc >> 1) ^(0xEDB88320 & mask)
-		}
-	}
-
-	return ~crc
 }
 
 def generate_payload(command, data=null) {
@@ -355,52 +295,91 @@ def generate_payload(command, data=null) {
 	return buf
 }
 
-import hubitat.device.HubAction
-import hubitat.device.Protocol
+// Helper functions
+def payload()
+{
+	def payload_dict = [
+		"device": [
+			"status": [
+				"hexByte": "0a",
+				"command": ["devId": "", "gwId": "", "uid":"", "t": ""]
+			],
+			"set": [
+				"hexByte": "07",
+				"command": ["devId":"", "uid": "", "t": ""]
+			],
+			"prefix": "000055aa00000000000000",
+			"suffix": "000000000000aa55"
+		]
+	]
 
-def status() {
-	byte[] buf = generate_payload("status")
-
-	String msg = hubitat.helper.HexUtils.byteArrayToHexString(buf)
-
-	// Needed to use the rawSocket interface to get a response
-	interfaces.rawSocket.connect(settings.ipaddress, 6668, byteInterface: true, readDelay: 500)
-
-	try {
-		interfaces.rawSocket.sendMessage(msg)
-	} catch (e) {
-		log.error "Error $e"
-	}
+	return payload_dict
 }
 
-def on() {
-	def buf = generate_payload("set", ["${settings.endpoint}":true])
+// Huge thank you to MrYutz for posting Groovy AES ecryption drivers for groovy
+//https://community.hubitat.com/t/groovy-aes-encryption-driver/31556
 
-	if (logEnable) log.debug hubitat.helper.HexUtils.byteArrayToHexString(buf)
+import javax.crypto.spec.SecretKeySpec;
+import javax.crypto.spec.IvParameterSpec;
+import javax.crypto.Cipher
 
-	String msg = hubitat.helper.HexUtils.byteArrayToHexString(buf)
+// Encrypt plain text v. 3.1 uses base64 encoding, while 3.3 does not
+def encrypt (def plainText, def secret, encodeB64=true) {
 
-	try {
-		//port 6668
-		interfaces.rawSocket.connect(settings.ipaddress, 6668, byteInterface: true, readDelay: 500)
-		interfaces.rawSocket.sendMessage(msg)
-	} catch (e) {
-		log.error "Could not open raw Socket connection: $e"
+	// Encryption is AES in ECB mode, pad using PKCS5Padding as needed
+	def cipher = Cipher.getInstance("AES/ECB/PKCS5Padding ")
+	SecretKeySpec key = new SecretKeySpec(secret.getBytes("UTF-8"), "AES")
+
+	// Give the encryption engine the encryption key
+	cipher.init(Cipher.ENCRYPT_MODE, key)
+
+	def result = ""
+
+	if (encodeB64) {
+		result = cipher.doFinal(plainText.getBytes("UTF-8")).encodeBase64().toString()
+	} else {
+		result = cipher.doFinal(plainText.getBytes("UTF-8")).encodeHex().toString()
 	}
+
+	return result
 }
 
-def off() {
-	def buf = generate_payload("set", ["${settings.endpoint}":false])
+// Decrypt ByteArray
+def decrypt_bytes (byte[] cypherBytes, def secret, decodeB64=false) {
+	if (logEnable) log.debug "*********** Decrypting **************"
 
-	if (logEnable) log.debug hubitat.helper.HexUtils.byteArrayToHexString(buf)
+	def cipher = Cipher.getInstance("AES/ECB/PKCS5Padding ")
+	SecretKeySpec key = new SecretKeySpec(secret.getBytes(), "AES")
 
-	String msg = hubitat.helper.HexUtils.byteArrayToHexString(buf)
+	cipher.init(Cipher.DECRYPT_MODE, key)
 
-	try {
-		//port 6668
-		interfaces.rawSocket.connect(settings.ipaddress, 6668, byteInterface: true, readDelay: 500)
-		interfaces.rawSocket.sendMessage(msg)
-	} catch (e) {
-		log.error "Could not open raw Socket connection: $e"
+	if (decodeB64) {
+		cypherBytes = cypherBytes.decodeBase64()
 	}
+
+	def result = cipher.doFinal(cypherBytes)
+
+	return new String(result, "UTF-8")
+}
+
+import java.security.MessageDigest
+
+def generateMD5(String s){
+	MessageDigest.getInstance("MD5").digest(s.bytes).encodeHex().toString()
+}
+
+def CRC32b(bytes, length) {
+	crc = 0xFFFFFFFF
+
+	for (i = 0; i < length; i++) {
+		b = Byte.toUnsignedInt(bytes[i])
+
+		crc = crc ^ b
+		for (j = 7; j >= 0; j--) {
+			mask = -(crc & 1)
+			crc = (crc >> 1) ^(0xEDB88320 & mask)
+		}
+	}
+
+	return ~crc
 }
