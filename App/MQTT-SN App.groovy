@@ -28,7 +28,7 @@ definition (
 preferences {
 	section("Debugging") {
 		input name: "logEnable", type: "bool", title: "Enable debug logging", defaultValue: true
-		input name: "acceptNewDevices", type: "bool", title: "Accept new devices for 3 hours:", defaultValue: true
+		input name: "acceptNewDevices", type: "bool", title: "Accept new devices for 2 minutes", defaultValue: true
 	}
 }
 
@@ -181,24 +181,23 @@ def installed() {
 
 def logsOff() {
 	log.warn "debug logging disabled..."
-	device.updateSetting("logEnable", [value: "false", type: "bool"])
+	app.updateSetting("logEnable", [value: "false", type: "bool"])
 }
 
 def newDevicesOff() {
 	log.warn "Does not accept new devices any more..."
-	device.updateSetting("acceptNewDevices", [value: "false", type: "bool"])
+	app.updateSetting("acceptNewDevices", [value: "false", type: "bool"])
 }
 
 def updated() {
+	initialize()
+
 	log.debug "updated"
 	log.debug "Access URL:" + getFullLocalApiServerUrl()
 	log.debug "Access token:" + state.accessToken
 
 	if (logEnable) runIn(1800, logsOff)
-
-	if (acceptNewDevices) runIn(3*60*60, newDevicesOff)
-
-	initialize()
+	if (acceptNewDevices) runIn(2*60, newDevicesOff)
 }
 
 def initialize() {
