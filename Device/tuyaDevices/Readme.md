@@ -62,6 +62,8 @@ Here is an example of data coming from the device:
 
 I have one of these Wifi Sirens that got me into this Hubitat-tuya integration. Here is a few words on how I communicate with the siren.
 
+![tuya Wifi Siren NEO](images/siren.jpg)
+
 When I do the ```python -m tinytuya wizard``` or ```python -m tinytuya scan``` command as described above, my siren replies the following status message:
 ```
 Status: {'101': '4', '102': '3', '103': 15, '104': False}
@@ -86,3 +88,26 @@ Under is a list of my interpretation of the different sounds on the siren (mostl
 8. "American fire truck horn"
 9. "Production line down"
 10. "Burglar alarm" (more conventional)
+
+## tuya Three gang switch
+
+Way back, before getting into all this smart home things, I bought several of these 3 button touch light switches thinking they were something else. Back then I did not get them to work, and they did not really fit the need, so I just put them on the shelf. The other day I stumbled across them, and found out I had to give them some investigation, and behold, they turn out to be tuya devices. They look something like this:
+![tuya Wifi 3 button touch switch](images/gangSwitch.jpg)
+
+They are totally unbranded, the build quality seems ok, but I do not intend to use them for anything permanent. They are not even CE marked as far as I can see, and hence also illegal to install, in Norway at least.
+
+><b>Disclaimer:</b> I have no experience with these devices other than debug purposes, and I come with no recommendations either way.
+
+Anyway, it turns out that the device works flawlessly with the tuya driver, hence for the fun of it I implemented a full driver for these devices. Perhaps it is a good example for anyone in need to develop the tuya drivers into actual devices to add to the smart home.
+
+### tuyaThreeGangSwitch driver features:
+- tuya encrypted protocol for local communication
+- Parent device spawning 3 child devices upon installation
+- Configurable status polling, parent updates children as needed
+- Parent control child settings
+### Endpoints
+Switch status report:
+```
+{'1': true/false, '2': true/false, '3': true/false, '5': 0}
+```
+Endpoints 1-3 corresponds to top, middle and bottom touch buttons on the physical deice. Endpoint 5 is a master controller that turns all 1-3 enpoints on or off (true or false). In my implementation the parent device controls endpoint 5, i.e. all switches on or off. While each child device corresponds to a physical button.
