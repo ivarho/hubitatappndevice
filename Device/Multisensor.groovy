@@ -31,6 +31,7 @@ metadata {
 		attribute "raw_humid", "number"
 		attribute "debugMsg", "String"
 		attribute "rssi", "number"
+		attribute "debugTemperature", "number"
 
 		command "setTemperature"
 		command "setBatteryVoltage"
@@ -40,6 +41,8 @@ metadata {
 		command "setStatus"
 		command "setDebugMessage"
 		command "setRSSI"
+		command "debugMode"
+		command "normalMode"
 	}
 
 	preferences {
@@ -68,6 +71,8 @@ def updated(settings) {
 
 	if (logEnable) runIn(1800, logsOff)
 
+	state.mode = "normal"
+
 	//setTemperature(20.92)
 	//setBatteryVoltage(2000)
 }
@@ -89,6 +94,18 @@ def on() {
 
 def off() {
 	sendEvent(name: "switch", value: "off")
+}
+
+def normalMode()
+{
+	state.mode = "normal"
+	sendEvent(name: "mode", value: state.mode)
+}
+
+def debugMode()
+{
+	state.mode = "debug"
+	sendEvent(name: "mode", value: state.mode)
 }
 
 def resetMaxMin() {
@@ -139,9 +156,16 @@ def setTemperature(temperature) {
 	if (logEnable) log.debug "Executing 'setTemperature'";
 	// TODO: handle 'setTemperature' command
 
-	if (temperature > -60 && temperature < 300) {
-		sendEvent(name: "temperature", value: temperature.round(1), unit: "°C", isStateChange: forceStateChangeOnTempChange)
+	if (state.mode == null) {
+		state.mode = "normal"
 	}
+
+	if (temperature > -60 && temperature < 300 && state.mode == "normal") {
+		sendEvent(name: "temperature", value: temperature.round(1), unit: "°C", isStateChange: forceStateChangeOnTempChange)
+	} else {
+		sendEvent(name: "debugTemperature", value: temperature, unit: "°C")
+	}
+
 
 	if (temperature > state.maxTemp) {
 		state.maxTemp = temperature
