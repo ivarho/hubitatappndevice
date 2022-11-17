@@ -111,3 +111,9 @@ Switch status report:
 {'1': true/false, '2': true/false, '3': true/false, '5': 0}
 ```
 Endpoints 1-3 corresponds to top, middle and bottom touch buttons on the physical deice. Endpoint 5 is a master controller that turns all 1-3 enpoints on or off (true or false). In my implementation the parent device controls endpoint 5, i.e. all switches on or off. While each child device corresponds to a physical button.
+
+## tuya Generic WindowBlind Driver
+
+WARNING! Driver is untested and implemented as a reply to comments and input received from other home automation enthusiasts. So there is a lot of guesswork involved, and no guarantees that this will work!
+
+It seems like window blinds are popular tuya applications. I have added an experimental driver based on feedback from you guys. Test it and let me know if it works.
