@@ -172,7 +172,11 @@ def setTiltLevel(tilt) {
 }
 
 def startPositionChange(direction) {
-
+    if (direction == "open") {
+        open()
+    } else if (direction == "close") {
+        close()
+    }
 }
 
 def stopPositionChange() {
