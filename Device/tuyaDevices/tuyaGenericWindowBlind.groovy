@@ -17,7 +17,7 @@ metadata {
 	definition(name: "tuya Generic WindowBlind", namespace: "iholand", author: "iholand") {
 		capability "Actuator"
 		capability "Sensor"
-        capability "WindowBlind"
+		capability "WindowBlind"
 
 		command "status"
 
@@ -128,6 +128,16 @@ def parse(String description) {
 		status = dec_status
 	}
 
+	parse_tuya_payload(status)
+
+	try {
+		interfaces.rawSocket.close()
+	} catch (e) {
+		log.error "Could not close socket: $e"
+	}
+}
+
+def parse_tuya_payload(status) {
 	def jsonSlurper = new groovy.json.JsonSlurper()
 	def status_object = jsonSlurper.parseText(status)
 
@@ -137,17 +147,14 @@ def parse(String description) {
 		sendEvent(name: "windowBlind", value : "open")
 	} else if (status_object.dps["1"] == "close") {
 		sendEvent(name: "windowBlind", value : "closed")
-	} else {
-        sendEvent(name: "windowBlind", value : "unknown")
-    }
+	}
 
-    sendEvent(name: "tilt", value : status_object.dps["2"])
-    sendEvent(name: "position", value : status_object.dps["3"])
+	if (status_object.dps["2"]) {
+		sendEvent(name: "tilt", value : status_object.dps["2"])
+	}
 
-	try {
-		interfaces.rawSocket.close()
-	} catch (e) {
-		log.error "Could not close socket: $e"
+	if (status_object.dps["3"]) {
+		sendEvent(name: "position", value : status_object.dps["3"])
 	}
 }
 
@@ -156,31 +163,36 @@ def status() {
 }
 
 def open() {
-    send(generate_payload("set", ["1":"open"]))
+	send(generate_payload("set", ["1":"open"]))
+
+	// Testing
+	/*parse_tuya_payload("{\"devId\":\"2502206124a160295f27\",\"dps\":{\"1\":\"open\",\"2\":100,\"3\":98}}")
+	parse_tuya_payload("{\"devId\":\"2502206124a160295f27\",\"dps\":{\"3\":40}}")
+	parse_tuya_payload("{\"devId\":\"2502206124a160295f27\",\"dps\":{\"1\":\"close\"}")*/
 }
 
 def close() {
-    send(generate_payload("set", ["1":"close"]))
+	send(generate_payload("set", ["1":"close"]))
 }
 
 def setPosition(position) {
-    send(generate_payload("set", ["3":position]))
+	send(generate_payload("set", ["3":position]))
 }
 
 def setTiltLevel(tilt) {
-    send(generate_payload("set", ["2":tilt]))
+	send(generate_payload("set", ["2":tilt]))
 }
 
 def startPositionChange(direction) {
-    if (direction == "open") {
-        open()
-    } else if (direction == "close") {
-        close()
-    }
+	if (direction == "open") {
+		open()
+	} else if (direction == "close") {
+		close()
+	}
 }
 
 def stopPositionChange() {
-    send(generate_payload("set", ["1":"stop"]))
+	send(generate_payload("set", ["1":"stop"]))
 }
 
 import hubitat.device.HubAction
