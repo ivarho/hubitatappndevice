@@ -216,6 +216,12 @@ def socketStatus(String message) {
 	if (logEnable) log.debug "*** Socket status: ${message}"
 
 	if (logEnable) log.info "Socket errors usually happen because a second message is sent before the previous is completed. Add delay between controlling several endpoints on the device."
+
+	try {
+		interfaces.rawSocket.close()
+	} catch (e) {
+		log.error "Could not close socket: $e"
+	}
 }
 
 def generate_payload(command, data=null) {
