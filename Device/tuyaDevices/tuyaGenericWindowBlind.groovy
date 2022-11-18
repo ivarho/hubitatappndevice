@@ -172,7 +172,7 @@ def open() {
 }
 
 def close() {
-	send(generate_payload("set", ["1":"close"]))
+	send(generate_payload("set", ["1":"closed"]))
 }
 
 def setPosition(position) {
