@@ -144,17 +144,17 @@ def parse_tuya_payload(status) {
 	sendEvent(name: "availableEndpoints", value: status_object.dps)
 
 	if (status_object.dps["1"] == "open") {
-		sendEvent(name: "windowBlind", value : "open")
+		sendEvent(name: "windowBlind", value : "open", isStateChange : true)
 	} else if (status_object.dps["1"] == "close") {
-		sendEvent(name: "windowBlind", value : "closed")
+		sendEvent(name: "windowBlind", value : "closed", isStateChange : true)
 	}
 
 	if (status_object.dps["2"]) {
-		sendEvent(name: "tilt", value : status_object.dps["2"])
+		sendEvent(name: "tilt", value : status_object.dps["2"], isStateChange : true)
 	}
 
 	if (status_object.dps["3"]) {
-		sendEvent(name: "position", value : status_object.dps["3"])
+		sendEvent(name: "position", value : status_object.dps["3"], isStateChange : true)
 	}
 }
 
