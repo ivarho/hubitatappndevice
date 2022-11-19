@@ -32,6 +32,7 @@ preferences {
 		input "localKey", "text", title: "Device local key:", required: false
 		input name: "logEnable", type: "bool", title: "Enable debug logging", defaultValue: true
 		input "tuyaProtVersion", "enum", title: "Select tuya protocol version: ", required: true, options: [31: "3.1", 33 : "3.3"]
+		input name: "pull_interval", type: "enum", title: "Configure poll interval:", options: [0: "No polling", 1:"Every 1 second", 2:"Every 2 second", 3: "Every 3 second", 5: "Every 5 second", 10: "Every 10 second", 15: "Every 15 second", 20: "Every 20 second", 30: "Every 30 second", 60: "Every 1 min", 120: "Every 2 min", 180: "Every 3 min"]
 	}
 }
 
@@ -45,7 +46,25 @@ def updated() {
 	log.warn "debug logging is: ${logEnable == true}"
 	if (logEnable) runIn(1800, logsOff)
 
-	sendEvent(name: "switch", value: "off")
+	// Configure poll interval, only the parent pull for status
+	if (pull_interval.toInteger() != null) {
+		//Schedule run
+
+		if (pull_interval.toInteger() == 0) {
+			unschedule(status)
+		} else if (pull_interval.toInteger() < 60) {
+			schedule("*/${pull_interval} * * ? * *", status)
+		} else if (pull_interval.toInteger() < 60*60) {
+			minutes = pull_interval.toInteger()/60
+			if(logEnable) log.debug "Setting schedule to pull every ${minutes} minutes"
+			schedule("0 */${minutes} * ? * *", status)
+		}
+
+		status()
+
+	} else {
+		status()
+	}
 }
 
 def parse(String description) {
