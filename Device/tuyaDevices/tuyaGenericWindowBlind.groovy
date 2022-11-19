@@ -46,6 +46,8 @@ def updated() {
 	log.warn "debug logging is: ${logEnable == true}"
 	if (logEnable) runIn(1800, logsOff)
 
+	sendEvent(name: "windowBlind", value : "closed")
+
 	// Configure poll interval, only the parent pull for status
 	if (pull_interval.toInteger() != null) {
 		//Schedule run
@@ -183,6 +185,7 @@ def status() {
 
 def open() {
 	send(generate_payload("set", ["1":"open"]))
+	sendEvent(name: "windowBlind", value : "opening")
 
 	// Testing
 	/*parse_tuya_payload("{\"devId\":\"2502206124a160295f27\",\"dps\":{\"1\":\"open\",\"2\":100,\"3\":98}}")
@@ -192,6 +195,7 @@ def open() {
 
 def close() {
 	send(generate_payload("set", ["1":"close"]))
+	sendEvent(name: "windowBlind", value : "closing")
 }
 
 def setPosition(position) {
