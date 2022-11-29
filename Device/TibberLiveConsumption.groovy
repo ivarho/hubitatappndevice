@@ -15,6 +15,7 @@
  *
  *
  * Change log:
+ * - Added hub firmware version to the user agent information, and use device id as client id
  * - Added support for the new webSocket API graphql-transport-ws
  * - Added a motion detector output as indication of over consumption
  * - Added setting for controlling run time, i.e. continuous, every 5 min etc.
@@ -64,7 +65,7 @@ def parse(description) {
 
 		state.error_count = 0;
 
-		sub = '{"type": "subscribe", "id": "'+ state.uuid +'", "payload": {"query": "subscription{liveMeasurement(homeId:\\"'+ tibber_homeId +'\\"){timestamp\\r\\npower\\r\\naccumulatedConsumptionLastHour}}"}}'
+		sub = '{"type": "subscribe", "id": "'+ device.getDeviceNetworkId() +'", "payload": {"query": "subscription{liveMeasurement(homeId:\\"'+ tibber_homeId +'\\"){timestamp\\r\\npower\\r\\naccumulatedConsumptionLastHour}}"}}'
 
 		interfaces.webSocket.sendMessage(sub)
 	}
@@ -170,13 +171,13 @@ def connectSocket() {
 		querySubscriptionURL()
 	}
 
-	interfaces.webSocket.connect(state.subscriptionURL, pingInterval:20, headers: ["Sec-WebSocket-Protocol": "graphql-transport-ws", "User-Agent":"Hubitat/1 iholand-TibberLiveConsumption/1.0-alpha"])
+	interfaces.webSocket.connect(state.subscriptionURL, pingInterval:20, headers: ["Sec-WebSocket-Protocol": "graphql-transport-ws", "User-Agent":"Hubitat/${location.hub.firmwareVersionString} iholand-TibberLiveConsumption/2.0"])
 	interfaces.webSocket.sendMessage(auth)
 
 }
 
 def endConnection() {
-	completeMessage = '{"type":"complete", "id":"'+ state.uuid +'"}'
+	completeMessage = '{"type":"complete", "id":"'+ device.getDeviceNetworkId() +'"}'
 
 	if(logEnable) log.debug completeMessage
 
@@ -190,10 +191,6 @@ def updated(settings) {
 	closeSocket()
 
 	unschedule()
-
-	if (!state.uuid) {
-		state.uuid = UUID.randomUUID().toString()
-	}
 
 	querySubscriptionURL()
 
