@@ -121,6 +121,8 @@ def energyConsumption (hour, chargeTime, power) {
 
 def planLowestPrice () {
 
+	getPrice()
+
 	def lowestEnergyCost = 10000
 	def lowestEnergyCostHour = 0
 
