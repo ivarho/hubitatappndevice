@@ -41,6 +41,7 @@ preferences {
 
 	section("Other") {
 		input "earliestTimeToStartCharge", "time", title: "Earliest start car charger", required: true
+		input "fetchUpdatedPrices", "time", title: "When to get updated prices from Tibber", required: true
 		input "readyByTime", "time", title: "When must charge be complete", required: true
 
 		input (
@@ -73,7 +74,7 @@ def updated() {
 }
 
 def initialize() {
-	schedule(earliestTimeToStartCharge, planLowestPrice);
+	schedule(fetchUpdatedPrices, planLowestPrice);
 }
 
 def verifySwitchOn()
@@ -111,6 +112,7 @@ def turnOnCarCharger() {
 	} else if (overrideSwitch?.currentValue('switch').contains('off')) {
 		carChargerOutlet?.on()
 		runIn(5*60, verifySwitchOn)
+		unschedule(turnOnCarCharger)
 	}
 }
 
@@ -121,7 +123,13 @@ def energyConsumption (hour, chargeTime, power) {
 
 def planLowestPrice () {
 
-	getPrice()
+	if (getPrice() == false) {
+		log.error "Failed to fetch prices!"
+
+		runIn(15*60, planLowestPrice)
+
+		return
+	}
 
 	def lowestEnergyCost = 10000
 	def lowestEnergyCostHour = 0
@@ -169,7 +177,9 @@ def planLowestPrice () {
 def getPrice() {
 	log.debug("getPrice")
 
-	def prices = [];
+	def prices = []
+
+	def returnStatus = true
 
 	if(tibber_apikey == null){
 		log.error("API key is not set. Please set it in the settings.")
@@ -197,14 +207,19 @@ def getPrice() {
 						prices << (num.total)*100;
 					}
 					log.debug(prices);
+				} else {
+					returnStatus = false
 				}
 			}
 		} catch (e) {
-			log.debug "something went wrong: $e"
+			log.error "something went wrong: $e"
+			returnStatus = false
 		}
 	}
 
 	state.eneryPrices = prices
+
+	return returnStatus
 }
 
 def graphQLApiQuery(){
