@@ -1,7 +1,7 @@
 /**
  *  Tibber Outlet Controller Slave
  *
- *  Copyright 2019-2020 Ivar Holand
+ *  Copyright 2020-2023 Ivar Holand
  *
  *  Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
  *  in compliance with the License. You may obtain a copy of the License at:
@@ -13,7 +13,6 @@
  *  for the specific language governing permissions and limitations under the License.
  *
  */
-
 metadata {
 	definition (name: "Tibber Outlet Controller Slave", namespace: "iholand", author: "Ivar Holand") {
 		capability "Switch"
@@ -46,8 +45,6 @@ def updated() {
 // parse events into attributes
 def parse(String description) {
 	if (logEnable) log.debug "Parsing '${description}'"
-	// TODO: handle 'switch' attribute
-
 }
 
 def logsOff() {
@@ -111,8 +108,7 @@ def setChargerStart(startTime)
 	if (logEnable) log.debug(startTime)
 
 	state.startTime = startTime
-	state.nextChargeStartsAt = msgBeforeTime + " " + startTime + ":00" + state.postPosponeCharge
+	state.nextChargeStartsAt = msgBeforeTime + " " + startTime + state.postPosponeCharge
 
 	sendEvent(name: "nextChargeStartsAt", value: state.nextChargeStartsAt)
-	sendEvent(name: "energy", value: startTime*100)
 }

@@ -1,7 +1,7 @@
 /**
  *  Tibber Energy Price Car Charge Controller
  *
- *  Copyright 2022 Ivar Holand
+ *  Copyright 2022-2023 Ivar Holand
  *
  *  Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
  *  in compliance with the License. You may obtain a copy of the License at:
@@ -29,9 +29,9 @@ preferences {
 		input "carChargerOutlet", "capability.switch", required: false, title: "Switch to control:"
 	}
 
-	/*section("Notifications") {
-		input "sendPush", "bool", required: false, title: "Send Push Notification when status changes?"
-	}*/
+	section("Notifications") {
+		input "notifier", "capability.notification", required: false, title: "Select notification device"
+	}
 
 	section("Battey Preferences") {
 		input "batterySize", "number", title: "Car battery size (kWh)", required: true, defaultValue: 24
@@ -62,15 +62,16 @@ def installed() {
 }
 def updated() {
 	log.debug "Updated with settings: ${settings}"
+
+	state.errorCount = 0
+
 	unsubscribe()
 	unschedule()
 	initialize()
 
-	getPrice()
+	turnOffCarCharger()
 
 	planLowestPrice()
-
-	turnOffCarCharger()
 }
 
 def initialize() {
@@ -102,6 +103,11 @@ def turnOffCarCharger() {
 		carChargerOutlet?.off()
 		runIn(5*60, verifySwitchOff)
 	}
+
+	unschedule(turnOffCarCharger)
+
+	def ControllerSwitch = getChildDevices()[0]
+	ControllerSwitch?.setChargerStart("--:-- <small>(awaiting plan)</small>")
 }
 
 def turnOnCarCharger() {
@@ -126,7 +132,26 @@ def planLowestPrice () {
 	if (getPrice() == false) {
 		log.error "Failed to fetch prices!"
 
-		runIn(15*60, planLowestPrice)
+		state.errorCount = state.errorCount + 1
+
+		if (state.errorCount > 6) {
+			// Error trying to set up plan, send notification and turn on car charger at 02:00
+
+			notifier?.deviceNotification("Could not set up EV charging plan, using fail-safe.")
+
+			unschedule(turnOnCarCharger)
+			unschedule(turnOffCarCharger)
+
+			schedule("0 0 2 * * ?", turnOnCarCharger)
+			schedule("0 0 8 * * ?", turnOffCarCharger)
+
+			def ControllerSwitch = getChildDevices()[0]
+			ControllerSwitch?.setChargerStart("fail-safe")
+
+			state.errorCount = 0
+		} else {
+			runIn(30*60, planLowestPrice)
+		}
 
 		return
 	}
@@ -170,8 +195,10 @@ def planLowestPrice () {
 	schedule("0 0 ${lowestEnergyCostHour % 24} * * ?", turnOnCarCharger)
 	schedule("0 0 8 * * ?", turnOffCarCharger)
 
+	state.errorCount = 0
+
 	def ControllerSwitch = getChildDevices()[0]
-	ControllerSwitch?.setChargerStart(lowestEnergyCostHour % 24);
+	ControllerSwitch?.setChargerStart(lowestEnergyCostHour % 24 + ":00")
 }
 
 def getPrice() {
@@ -194,6 +221,11 @@ def getPrice() {
 				if(resp.status == 200){
 					def today = resp.data.data.viewer.homes[0].currentSubscription.priceInfo.today
 					def tomorrow = resp.data.data.viewer.homes[0].currentSubscription.priceInfo.tomorrow
+
+					if (tomorrow.size <= 0) {
+						log.warn("Tomorrows prices are not ready, try again later")
+						returnStatus = false
+					}
 
 					def priceList = today
 
