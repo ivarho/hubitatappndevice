@@ -179,6 +179,10 @@ def parse_tuya_payload(status) {
 	}
 }
 
+def socketStatus(socetStatusMsg) {
+	log.debug "Socket status message received:" + socetStatusMsg
+}
+
 def status() {
 	send(generate_payload("status"))
 }
