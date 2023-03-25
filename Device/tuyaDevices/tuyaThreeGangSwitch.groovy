@@ -246,6 +246,10 @@ def parse(String description) {
 	}
 }
 
+def socketStatus(socetStatusMsg) {
+	log.debug "Socket status message received:" + socetStatusMsg
+}
+
 def status() {
 	send(generate_payload("status"))
 }

@@ -187,6 +187,10 @@ def parse(String description) {
 	}
 }
 
+def socketStatus(socetStatusMsg) {
+	log.debug "Socket status message received:" + socetStatusMsg
+}
+
 def payload()
 {
 	def payload_dict = [
