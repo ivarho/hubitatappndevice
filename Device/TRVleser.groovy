@@ -21,7 +21,6 @@ metadata {
 		attribute "wastetype_raw", "string"
 
 		command "updateWasteType"
-		command "getWasteType"
 	}
 }
 
