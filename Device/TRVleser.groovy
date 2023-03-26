@@ -1,7 +1,7 @@
 /**
  *  TRV - leser
  *
- *  Copyright 2020-2022 Ivar Holand
+ *  Copyright 2020-2023 Ivar Holand
  *
  *  Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
  *  in compliance with the License. You may obtain a copy of the License at:
@@ -38,7 +38,6 @@ def updated(settings) {
 	updateWasteType()
 
 	schedule("0 0 10 ? * MON", updateWasteType)
-
 }
 
 // parse events into attributes
@@ -48,7 +47,7 @@ def parse(description, data) {
 	def wasteplan_content_start = page_content.indexOf("id=\"wasteplan-content")
 	page_content = page_content[wasteplan_content_start..-1]
 
-	def bins_start = page_content.indexOf("class=\"bins")
+	def bins_start = page_content.indexOf("class=\"week")
 	page_content = page_content[bins_start..bins_start+1000]
 
 	def tbody_start = page_content.indexOf("<tbody>")
@@ -61,18 +60,20 @@ def parse(description, data) {
 	def img_src = ""
 
 	//if week is Tommefri
-	if (wType == "fri-uke ") {
-		img_src = "https://upload.wikimedia.org/wikipedia/commons/thumb/8/80/Icon_no.svg/16px-Icon_no.svg.png"
+	if (wType.startsWith("fri-uke ")) {
+		img_http = "<i class=\"material-icons he-bin\" style=\"color: rgb(236,164,30); font-size: 52px;\"></i><br>Tømmefri"
 		wType = "tømmefri"
 	} else {
 		//Find ICON link
 		page_content = page_content[end_pointer..-1]
 		def img_src_ptr = page_content.indexOf("img src") + 9
-		def img_src_end_ptr = page_content.indexOf("/span") - 4
+		def img_src_end_ptr = page_content.indexOf("style") - 3
 		img_src = page_content[img_src_ptr..img_src_end_ptr]
+		img_http = "<img src=\"${img_src}\" width=70 style=\"opacity:0.7;\"><br>" + wType.capitalize()
+		//img_http = wType.capitalize()
 	}
 
-	sendEvent(name: "wastetype", value: "<img src=\"${img_src}\" width=70 style=\"opacity:0.7;\"><br>" + wType.capitalize(), isStateChange: true)
+	sendEvent(name: "wastetype", value: "${img_http}", isStateChange: true)
 	sendEvent(name: "wastetype_raw", value: wType.capitalize(), isStateChange: true)
 
 	log.debug "Parsing '${wType}'"
