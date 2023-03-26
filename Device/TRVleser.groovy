@@ -27,7 +27,7 @@ metadata {
 
 preferences {
 
-	input "areaCode", "text", title: "Area code from trv.no: ", required: true
+	input "areaCode", "text", title: "Area code from trv.no: ", required: true, description: "<small>Open trv.no and go to Tømmeplan, enter your address. After the page with the plan opens, look at the URL/address field, the Area Code is the cryptic sting after .../plan/[id here]. E.g bd946946-a139-43b3-bb51-d125ff9af064</small>"
 }
 
 def updated(settings) {
