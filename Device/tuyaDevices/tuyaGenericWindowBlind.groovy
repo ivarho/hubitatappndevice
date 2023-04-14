@@ -1,5 +1,5 @@
 /**
- * Copyright 2022 Ivar Holand
+ * Copyright 2022-2023 Ivar Holand
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -105,7 +105,22 @@ def parse(String description) {
 			} else if (protocol_version == "3.3") {
 				message_start = 63
 			}
+		} else if (message_type == 8) {
+			// Incoming status message
+			// Find protocol version
+			byte[] ver_bytes = [msg_byte[20], msg_byte[21], msg_byte[22]]
+			protocol_version = new String(ver_bytes)
 
+			log.debug("Protocol version: " + protocol_version)
+
+			if (protocol_version == "3.1") {
+				message_start = 67
+				log.error("Not supported! Please upgrade device firmware to 3.3")
+			} else if (protocol_version == "3.3") {
+				message_start = 35
+			} else {
+				log.error("Device firmware version not supported, protocol verison" + protocol_version)
+			}
 		} else if (message_type == 10) {
 			// Incoming status message
 			message_start = 20
