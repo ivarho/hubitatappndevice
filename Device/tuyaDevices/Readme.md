@@ -117,3 +117,9 @@ Endpoints 1-3 corresponds to top, middle and bottom touch buttons on the physica
 WARNING! Driver is untested and implemented as a reply to comments and input received from other home automation enthusiasts. So there is a lot of guesswork involved, and no guarantees that this will work!
 
 It seems like window blinds are popular tuya applications. I have added an experimental driver based on feedback from you guys. Test it and let me know if it works.
+
+## tuya Generic RGBW Driver
+
+By popular demand I have added a tuya driver for a RGBW light bulb. The driver has been developed and tested on a Ledvance CLASSIC A 60 E27 bulb.
+
+A big thank you to Kenneths Teknik for posting this on the home-assistant forum on how to get the secret key for Ledvance products: https://community.home-assistant.io/t/ledvance-integration-this-is-how-to-do-it-as-per-08-22/449783
