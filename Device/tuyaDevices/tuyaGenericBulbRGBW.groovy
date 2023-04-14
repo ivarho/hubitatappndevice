@@ -173,7 +173,7 @@ def parse(String description) {
 		// Find message type to determine start of message
 		def message_type = msg_byte[11].toInteger()
 
-		log.debug ("Message type: ${message_type}")
+		if (logEnable) log.debug ("Message type: ${message_type}")
 
 		if (message_type == 7) {
 			// Incoming control message
@@ -193,7 +193,7 @@ def parse(String description) {
 			byte[] ver_bytes = [msg_byte[20], msg_byte[21], msg_byte[22]]
 			protocol_version = new String(ver_bytes)
 
-			log.debug("Protocol version: " + protocol_version)
+			if (logEnable) log.debug("Protocol version: " + protocol_version)
 
 			if (protocol_version == "3.1") {
 				message_start = 67
