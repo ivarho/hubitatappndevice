@@ -96,6 +96,17 @@ def setColor(colormap) {
 
 	setMap[21] = "colour"
 
+	if (logEnable) log.debug(colormap)
+
+	// Bug in Hubitat: documentation claims to give you a HSL color value,
+	// however, the value corresponds to a HSV color value
+
+	// Next bug, tuya documentation claims that the bulb wants a HSV color value
+	// https://developer.tuya.com/en/docs/iot/generic-light-bulb-template?id=Kag3g03a9vy81
+	// however, correct color is only achived by using HSL color value. This could also
+	// be a Ledvance issue. So other bulbs, might or might not need conversion to HSV
+	colormap = hsvToHsl(colormap.hue, colormap.saturation, colormap.level)
+
 	Integer bHue = colormap.hue * 3.6
 	Integer bSat = colormap.saturation*10
 	Integer bValue = colormap.level*10
@@ -287,18 +298,24 @@ def parse(String description) {
 	if (status_object.dps.containsKey("24")) {
 		// Hue
 		def hueStr = status_object.dps["24"].substring(0,4)
-		def hue = Integer.parseInt(hueStr, 16)/3.6
-		sendEvent(name: "hue", value : hue)
+		Float hue_fl = Integer.parseInt(hueStr, 16)/3.6
+		Integer hue = hue_fl.round(0)
 
 		// Saturation
 		def satStr = status_object.dps["24"].substring(5,8)
 		def sat = Integer.parseInt(satStr, 16)/10
-		sendEvent(name: "saturation", value : sat)
 
-		// Value
-		def valueStr = status_object.dps["24"].substring(9,12)
-		def value = Integer.parseInt(valueStr, 16)/10
-		sendEvent(name: "presetLevel", value : value)
+		// Level
+		def levelStr = status_object.dps["24"].substring(9,12)
+		def level = Integer.parseInt(levelStr, 16)/10
+
+		// Bug in Hubitat: Hubitat stores colors as HSV, however documents claim HSL. The tuya
+		// Ledvance bulb I have store color information in HSL, hence need to convert.
+		def colormap = hslToHsv(hue, sat, level)
+
+		sendEvent(name: "hue", value : colormap.hue)
+		sendEvent(name: "saturation", value : colormap.saturation)
+		sendEvent(name: "level", value : colormap.value)
 	}
 
 	sendEvent(name: "rawMessage", value: status_object.dps)
@@ -543,4 +560,53 @@ def CRC32b(bytes, length) {
 	}
 
 	return ~crc
+}
+
+def hslToHsv(hue, saturation, level)
+{
+	if (logEnable) log.debug ("HSL to HSV")
+	if (logEnable) log.debug ("${hue}, ${saturation}, ${level}")
+
+	// hue = hue
+	level = (level/100) * 2
+
+	saturation = (saturation/100) * ((level <= 1) ? level : 2 - level)
+
+	//ss *= (ll <= 100) ? ll : 2 - ll;
+
+	def value = (level + saturation) / 2
+
+	//*v = (ll + ss) / 2;
+
+	def sat = (2 * saturation) / (level + saturation)
+	//*s = (2 * ss) / (ll + ss);
+
+	def retMap = ["hue": hue, "saturation": (sat*100).intValue(), "value": (value*100).intValue()]
+	if (logEnable) log.debug retMap
+
+	return retMap
+}
+
+def hsvToHsl(hue, saturation, value)
+{
+	if (logEnable) log.debug ("HSV to HSL")
+	if (logEnable) log.debug ("${hue}, ${saturation}, ${value}")
+	//*hh = h;
+
+	def level = (2 - (saturation/100)) * (value/100)
+	//*ll = (2 - s) * v;
+
+	def sat = (saturation/100) * (value/100)
+	//*ss = s * v;
+
+	sat = sat / ((level <= 1) ? level : 2 - level)
+	//*ss /= (*ll < = 1) ? (*ll) : 2 - (*ll);
+
+	level = level / 2
+	//*ll /= 2;
+
+	def retMap = ["hue": hue, "saturation": (sat*100).intValue(), "level": (level*100).intValue()]
+	if (logEnable) log.debug retMap
+
+	return retMap
 }
