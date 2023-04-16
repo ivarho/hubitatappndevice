@@ -23,6 +23,7 @@ metadata {
 		capability "Refresh"
 		capability "LevelPreset"
 		capability "SwitchLevel"
+		capability "Switch"
 
 		command "status"
 
