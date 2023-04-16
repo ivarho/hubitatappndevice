@@ -26,6 +26,8 @@ metadata {
 
 		command "status"
 
+		command "SendCustomDataToDevice", [[name:"endpoint*", type:"NUMBER", description:"To which endpint(dps) do you want the data to be sent"], [name:"data*", type:"STRING", description:"the data to be sent, treated as string, but true and false is converted"]]
+
 		attribute "rawMessage", "String"
 	}
 }
@@ -157,6 +159,19 @@ def on() {
 
 def off() {
 	send(generate_payload("set", [20:false]))
+}
+
+def SendCustomDataToDevice(endpoint, data) {
+
+	// A fix for a common use-case where true and false is sent
+	// these values must be converted to boolean values to work
+	if (data == "true") {
+		data = true
+	} else if (data == "false") {
+		data = false
+	}
+
+	send(generate_payload("set", ["${endpoint}":data]))
 }
 
 def parse(String description) {
