@@ -53,6 +53,8 @@ def updated() {
 	log.warn "debug logging is: ${logEnable == true}"
 	if (logEnable) runIn(1800, logsOff)
 
+	state.payload = [:]
+
 	sendEvent(name: "switch", value: "off")
 }
 
@@ -90,7 +92,11 @@ def setColorTemperature(colortemperature, level=null, transitionTime=null) {
 		setMap[26] = transitionTime
 	}*/
 
-	send(generate_payload("set", setMap))
+	//send(generate_payload("set", setMap))
+
+	state.payload += setMap
+
+	runInMillis(250, 'sendSetMessage')
 }
 
 //colormap required (COLOR_MAP) - Color map settings [hue*:(0 to 100), saturation*:(0 to 100), level:(0 to 100)]
@@ -119,7 +125,10 @@ def setColor(colormap) {
 
 	setMap[24] = setting
 
-	send(generate_payload("set", setMap))
+	//send(generate_payload("set", setMap))
+
+	state.payload += setMap
+	runInMillis(250, 'sendSetMessage')
 
 }
 
@@ -143,7 +152,9 @@ def presetLevel(level) {
 		setMap[22] = level*10
 	}
 
-	send(generate_payload("set", setMap))
+	//send(generate_payload("set", setMap))
+	state.payload += setMap
+	runInMillis(250, 'sendSetMessage')
 }
 
 def setLevel(level, duration=null) {
@@ -155,11 +166,16 @@ def refresh() {
 }
 
 def on() {
-	send(generate_payload("set", [20:true]))
+	//send(generate_payload("set", [20:true]))
+
+	state.payload[20] = true
+	runInMillis(250, 'sendSetMessage')
 }
 
 def off() {
-	send(generate_payload("set", [20:false]))
+	//send(generate_payload("set", [20:false]))
+	state.payload[20] = false
+	runInMillis(250, 'sendSetMessage')
 }
 
 def SendCustomDataToDevice(endpoint, data) {
@@ -173,6 +189,12 @@ def SendCustomDataToDevice(endpoint, data) {
 	}
 
 	send(generate_payload("set", ["${endpoint}":data]))
+}
+
+def sendSetMessage() {
+
+	send(generate_payload("set", state.payload))
+	state.payload = [:]
 }
 
 def parse(String description) {
