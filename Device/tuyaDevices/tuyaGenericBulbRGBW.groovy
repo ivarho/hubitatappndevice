@@ -300,6 +300,7 @@ def parse(String description) {
 	// Brightness
 	if (status_object.dps.containsKey("22")) {
 		sendEvent(name: "presetLevel", value : status_object.dps["22"]/10)
+		sendEvent(name: "level", value : status_object.dps["22"]/10)
 	}
 
 	// Color temperature
