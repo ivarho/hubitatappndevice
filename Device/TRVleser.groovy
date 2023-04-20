@@ -52,7 +52,7 @@ def parse(description, data) {
 	def tbody_start = page_content.indexOf("<tbody>")
 	page_content = page_content[tbody_start..-1]
 
-	def pointer = page_content.indexOf("wastetype") + 15
+	def pointer = page_content.indexOf("wastetype icon") + 15
 	def end_pointer = page_content.indexOf("href") - 3
 	wType = page_content[pointer..end_pointer]
 
