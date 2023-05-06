@@ -145,16 +145,17 @@ def setSaturation(saturation) {
 def presetLevel(level) {
 	def setMap = [:]
 
-	if (level != null) {
+	if (level != null && level > 0) {
 		if (level > 100) level = 100
-		if (level < 0) level = 0
 
 		setMap[22] = level*10
-	}
 
-	//send(generate_payload("set", setMap))
-	state.payload += setMap
-	runInMillis(250, 'sendSetMessage')
+		//send(generate_payload("set", setMap))
+		state.payload += setMap
+		runInMillis(250, 'sendSetMessage')
+	} else {
+		off()
+	}
 }
 
 def setLevel(level, duration=null) {
@@ -225,18 +226,22 @@ def parse(String description) {
 		if (logEnable) log.debug ("Message type: ${message_type}")
 
 		if (message_type == 7) {
-			// Incoming control message
-			// Find protocol version
-			byte[] ver_bytes = [msg_byte[48], msg_byte[49], msg_byte[50]]
-			protocol_version = new String(ver_bytes)
+			if (msg_byte.size() > 51) {
+				// Incoming control message
+				// Find protocol version
+				byte[] ver_bytes = [msg_byte[48], msg_byte[49], msg_byte[50]]
+				protocol_version = new String(ver_bytes)
 
-			if (protocol_version == "3.1") {
-				message_start = 67
-			} else if (protocol_version == "3.3") {
-				message_start = 63
+				if (protocol_version == "3.1") {
+					message_start = 67
+				} else if (protocol_version == "3.3") {
+					message_start = 63
+				}
+			} else {
+				// Assume protocol 3.3
+				protocol_version == "3.3"
 			}
-
-		} else if (message_type == 8) {
+		} else if (message_type == 8 && msg_byte.size() > 23) {
 			// Incoming status message
 			// Find protocol version
 			byte[] ver_bytes = [msg_byte[20], msg_byte[21], msg_byte[22]]
@@ -297,67 +302,74 @@ def parse(String description) {
 	}
 
 	def jsonSlurper = new groovy.json.JsonSlurper()
-	def status_object = jsonSlurper.parseText(status)
 
-	// Switch status (on / off)
-	if (status_object.dps.containsKey("20")) {
-		if (status_object.dps["20"] == true) {
-			sendEvent(name: "switch", value : "on")
-		} else {
-			sendEvent(name: "switch", value : "off")
+	if (status != Null && status != "") {
+		def status_object = jsonSlurper.parseText(status)
+
+		// Switch status (on / off)
+		if (status_object.dps.containsKey("20")) {
+			if (status_object.dps["20"] == true) {
+				sendEvent(name: "switch", value : "on")
+			} else {
+				sendEvent(name: "switch", value : "off")
+			}
 		}
-	}
 
-	// Bulb Mode
-	if (status_object.dps.containsKey("21")) {
-		if (status_object.dps["21"] == "white") {
-			sendEvent(name: "colorMode", value : "CT")
-		} else if (status_object.dps["21"] == "colour") {
-			sendEvent(name: "colorMode", value : "RGB")
-		} else {
-			sendEvent(name: "colorMode", value : "EFFECTS")
+		// Bulb Mode
+		if (status_object.dps.containsKey("21")) {
+			if (status_object.dps["21"] == "white") {
+				sendEvent(name: "colorMode", value : "CT")
+			} else if (status_object.dps["21"] == "colour") {
+				sendEvent(name: "colorMode", value : "RGB")
+			} else {
+				sendEvent(name: "colorMode", value : "EFFECTS")
+			}
 		}
+
+		// Brightness
+		if (status_object.dps.containsKey("22")) {
+			sendEvent(name: "presetLevel", value : status_object.dps["22"]/10)
+			sendEvent(name: "level", value : status_object.dps["22"]/10)
+		}
+
+		// Color temperature
+		if (status_object.dps.containsKey("23")) {
+
+			Integer colortemperature = (status_object.dps["23"] + (2700/3.8))*3.8
+
+			sendEvent(name: "colorTemperature", value : colortemperature)
+		}
+
+		// Color information
+		if (status_object.dps.containsKey("24")) {
+			// Hue
+			def hueStr = status_object.dps["24"].substring(0,4)
+			Float hue_fl = Integer.parseInt(hueStr, 16)/3.6
+			Integer hue = hue_fl.round(0)
+
+			// Saturation
+			def satStr = status_object.dps["24"].substring(5,8)
+			def sat = Integer.parseInt(satStr, 16)/10
+
+			// Level
+			def levelStr = status_object.dps["24"].substring(9,12)
+			def level = Integer.parseInt(levelStr, 16)/10
+
+			// Bug in Hubitat: Hubitat stores colors as HSV, however documents claim HSL. The tuya
+			// Ledvance bulb I have store color information in HSL, hence need to convert.
+			def colormap = hslToHsv(hue, sat, level)
+
+			sendEvent(name: "hue", value : colormap.hue)
+			sendEvent(name: "saturation", value : colormap.saturation)
+			sendEvent(name: "level", value : colormap.value)
+		}
+
+		sendEvent(name: "rawMessage", value: status_object.dps)
+
+	} else {
+		// Message did not contain data, bulb received unknown command?
+		log.debug "Bulb did not understand command"
 	}
-
-	// Brightness
-	if (status_object.dps.containsKey("22")) {
-		sendEvent(name: "presetLevel", value : status_object.dps["22"]/10)
-		sendEvent(name: "level", value : status_object.dps["22"]/10)
-	}
-
-	// Color temperature
-	if (status_object.dps.containsKey("23")) {
-
-		Integer colortemperature = (status_object.dps["23"] + (2700/3.8))*3.8
-
-		sendEvent(name: "colorTemperature", value : colortemperature)
-	}
-
-	// Color information
-	if (status_object.dps.containsKey("24")) {
-		// Hue
-		def hueStr = status_object.dps["24"].substring(0,4)
-		Float hue_fl = Integer.parseInt(hueStr, 16)/3.6
-		Integer hue = hue_fl.round(0)
-
-		// Saturation
-		def satStr = status_object.dps["24"].substring(5,8)
-		def sat = Integer.parseInt(satStr, 16)/10
-
-		// Level
-		def levelStr = status_object.dps["24"].substring(9,12)
-		def level = Integer.parseInt(levelStr, 16)/10
-
-		// Bug in Hubitat: Hubitat stores colors as HSV, however documents claim HSL. The tuya
-		// Ledvance bulb I have store color information in HSL, hence need to convert.
-		def colormap = hslToHsv(hue, sat, level)
-
-		sendEvent(name: "hue", value : colormap.hue)
-		sendEvent(name: "saturation", value : colormap.saturation)
-		sendEvent(name: "level", value : colormap.value)
-	}
-
-	sendEvent(name: "rawMessage", value: status_object.dps)
 
 	try {
 		interfaces.rawSocket.close()
@@ -638,8 +650,10 @@ def hsvToHsl(hue, saturation, value)
 	def sat = (saturation/100) * (value/100)
 	//*ss = s * v;
 
-	sat = sat / ((level <= 1) ? level : 2 - level)
-	//*ss /= (*ll < = 1) ? (*ll) : 2 - (*ll);
+	if (level != 0) {
+		sat = sat / ((level <= 1) ? level : 2 - level)
+		//*ss /= (*ll < = 1) ? (*ll) : 2 - (*ll);
+	}
 
 	level = level / 2
 	//*ll /= 2;
