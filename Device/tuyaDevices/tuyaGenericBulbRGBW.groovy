@@ -145,8 +145,9 @@ def setSaturation(saturation) {
 def presetLevel(level) {
 	def setMap = [:]
 
-	if (level != null && level > 0) {
+	if (level != null) {
 		if (level > 100) level = 100
+		if (level <= 0) level = 1
 
 		setMap[22] = level*10
 
