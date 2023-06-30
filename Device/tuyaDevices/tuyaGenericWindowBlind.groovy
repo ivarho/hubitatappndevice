@@ -46,6 +46,8 @@ def updated() {
 	log.warn "debug logging is: ${logEnable == true}"
 	if (logEnable) runIn(1800, logsOff)
 
+	settings.localKey = settings.localKey.replaceAll('&lt;', '<')
+
 	sendEvent(name: "windowBlind", value : "closed")
 
 	// Configure poll interval, only the parent pull for status

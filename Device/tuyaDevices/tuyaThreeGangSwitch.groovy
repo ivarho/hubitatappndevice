@@ -68,6 +68,8 @@ def updated() {
 	log.warn "debug logging is: ${logEnable == true}"
 	if (logEnable) runIn(1800, logsOff)
 
+	settings.localKey = settings.localKey.replaceAll('&lt;', '<')
+
 	unschedule()
 
 	if (getParent() == null) {

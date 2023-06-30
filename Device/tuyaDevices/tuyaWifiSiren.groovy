@@ -59,6 +59,8 @@ def updated() {
 	log.warn "debug logging is: ${logEnable == true}"
 	if (logEnable) runIn(1800, logsOff)
 
+	settings.localKey = settings.localKey.replaceAll('&lt;', '<')
+
 	sendEvent(name: "sirenType", value: "1")
 	sendEvent(name: "sirenLength", value: 10)
 
