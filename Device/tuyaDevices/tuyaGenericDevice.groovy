@@ -46,8 +46,6 @@ def updated() {
 	log.warn "debug logging is: ${logEnable == true}"
 	if (logEnable) runIn(1800, logsOff)
 
-	settings.localKey = settings.localKey.replaceAll('&lt;', '<')
-
 	sendEvent(name: "switch", value: "off")
 }
 
@@ -347,6 +345,9 @@ import javax.crypto.Cipher
 // Encrypt plain text v. 3.1 uses base64 encoding, while 3.3 does not
 def encrypt (def plainText, def secret, encodeB64=true) {
 
+	// Fix key to remove any escaped characters
+	secret = secret.replaceAll('&lt;', '<')
+
 	// Encryption is AES in ECB mode, pad using PKCS5Padding as needed
 	def cipher = Cipher.getInstance("AES/ECB/PKCS5Padding ")
 	SecretKeySpec key = new SecretKeySpec(secret.getBytes("UTF-8"), "AES")
@@ -368,6 +369,9 @@ def encrypt (def plainText, def secret, encodeB64=true) {
 // Decrypt ByteArray
 def decrypt_bytes (byte[] cypherBytes, def secret, decodeB64=false) {
 	if (logEnable) log.debug "*********** Decrypting **************"
+
+	// Fix key to remove any escaped characters
+	secret = secret.replaceAll('&lt;', '<')
 
 	def cipher = Cipher.getInstance("AES/ECB/PKCS5Padding ")
 	SecretKeySpec key = new SecretKeySpec(secret.getBytes(), "AES")
