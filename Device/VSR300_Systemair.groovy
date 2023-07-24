@@ -33,15 +33,16 @@ metadata {
 		attribute "registerValue", "number"
 		attribute "lastWriteActionStatus", "string"
 		attribute "readRegister", "number"
+		attribute "registerValue", "number"
 		attribute "supplyAir", "number"
 		attribute "exhaustAir", "number"
 		attribute "extractAir", "number"
 		attribute "outdoorAir", "number"
 		attribute "frostProtSensor", "number"
+		attribute "targetSetpoint", "number"
 
 		command "sendTestData"
 		command "closeConnection"
-		//command "readRegisterValue"
 		command "readRegisterValue", [[name: "register", type: "NUMBER"]]
 		command "writeRegisterValue", [[name: "register*", type: "NUMBER"], [name: "value*", type: "NUMBER"]]
 		command "readRelevantTemperatures"
@@ -74,6 +75,8 @@ def initialize()
 
 def updated () {
 	state.transactionIdentifier = 0
+
+	state.commands = []
 
 	supportedFanSpeeds = new groovy.json.JsonBuilder(["low","medium","high"])
 
@@ -118,9 +121,9 @@ def setSpeed(fanspeed) {
 
 def poll() {
 	readRelevantTemperatures()
-	runInMillis(3000, readSetPoint)
-	runInMillis(6000, readRotorState)
-	runInMillis(9000, readSpeed)
+	readSetPoint()
+	readRotorState()
+	readSpeed()
 }
 
 def readSpeed()
@@ -144,7 +147,7 @@ def readRotorState()
 }
 
 def setHeatingSetpoint(temperature) {
-	if (temperatuer < 16) {
+	if (temperature < 16) {
 		temperature = 16
 	} else if (temperature > 19) {
 		temperature = 19
@@ -152,11 +155,17 @@ def setHeatingSetpoint(temperature) {
 
 	unschedule(auto)
 
-	setSetpoint(temperature)
+	sendEvent(name: "targetSetpoint", value: temperature)
+
+	runIn(3, updateSetPoint)
 }
 
 def setCoolingSetpoint(temperature) {
 	sendEvent(name: "coolingSetpoint", value: temperature)
+}
+
+def updateSetPoint() {
+	setSetpoint(device.currentValue("targetSetpoint"))
 }
 
 def setSetpoint(temperature) {
@@ -165,7 +174,6 @@ def setSetpoint(temperature) {
 	writeRegisterValue(222, temperature)
 
 	readSetPoint()
-
 }
 
 def setThermostatMode(mode) {
@@ -176,6 +184,7 @@ def setThermostatFanMode(mode) {
 
 def auto(){
 	setSetpoint(16)
+	setSpeed("medium")
 }
 
 def off() {
@@ -189,10 +198,10 @@ def emergencyHeat() {
 
 def cool() {
 	setSetpoint(0)
+	setSpeed("high")
 
 	runIn(30*60, auto)
 }
-
 
 def cycleSpeed() {
 	debug "Cycling speed"
@@ -202,30 +211,61 @@ def closeConnection() {
 	interfaces.rawSocket.close()
 }
 
+def addCommandToBuffer(byte[] cmd, register, value=null) {
+	bundle = []
+
+	bundle.add(cmd)
+	bundle.add(register)
+	bundle.add(value)
+
+	state.commands.add(0, bundle)
+}
+
+def sendFromBuffer() {
+	try {
+		bundle = state.commands.pop()
+	} catch(java.util.NoSuchElementException e1) {
+		debug "No more messages to send"
+		return
+	}
+
+	if (bundle != null) {
+		sendEvent(name: "readRegister", value: bundle[1])
+		if (bundle[2] != null) {
+			sendEvent(name: "registerValue", value: bundle[2])
+		}
+
+		String msg = hubitat.helper.HexUtils.byteArrayToHexString(bundle[0] as byte[])
+
+		interfaces.rawSocket.connect(settings.controller_ip, settings.controller_port.toInteger(), byteInterface: true, readDelay: 500)
+		interfaces.rawSocket.sendMessage(msg)
+
+		runIn(5, sendTimeout)
+	}
+}
+
+def sendTimeout() {
+	log.error "Timeout on sending, no response from VSR"
+	runInMillis(100, sendFromBuffer) // Retry
+}
+
 def readRegisterValue(register=settings.client_register, numRegs=1) {
 
 	byte[] modbusFrame = createModbusFrame(register, 3, null, numRegs)
 	byte[] tcpModbusFrame = createTcpModbusFrame(modbusFrame)
 
-	sendEvent(name: "readRegister", value: register)
+	addCommandToBuffer(tcpModbusFrame, register)
 
-	String msg = hubitat.helper.HexUtils.byteArrayToHexString(tcpModbusFrame)
-
-	interfaces.rawSocket.connect(settings.controller_ip, settings.controller_port.toInteger(), byteInterface: true, readDelay: 500)
-	interfaces.rawSocket.sendMessage(msg)
+	runInMillis(1, sendFromBuffer)
 }
 
 def writeRegisterValue(register, value) {
 	byte[] modbusFrame = createModbusFrame(register as int, 0x06, value as int)
 	byte[] tcpModbusFrame = createTcpModbusFrame(modbusFrame)
 
-	state.register = register
-	state.value = value
+	addCommandToBuffer(tcpModbusFrame, register, value)
 
-	String msg = hubitat.helper.HexUtils.byteArrayToHexString(tcpModbusFrame)
-
-	interfaces.rawSocket.connect(settings.controller_ip, settings.controller_port.toInteger(), byteInterface: true, readDelay: 500)
-	interfaces.rawSocket.sendMessage(msg)
+	runInMillis(1, sendFromBuffer)
 }
 
 def createModbusFrame(register, int function=3, value=null, numRegs=1) {
@@ -282,6 +322,9 @@ def createTcpModbusFrame(byte[] modbusFrame) {
 }
 
 def parse(incoming_data) {
+	unschedule(sendTimeout)
+	runInMillis(100, sendFromBuffer)
+
 	debug "*************** START ********************"
 	if(logEnable) log.debug "parse $incoming_data"
 
@@ -398,8 +441,6 @@ def parse_MODBUS(byte[] frame, lenght, transaction_identifier=0) {
 			if (device.currentValue("readRegister") == 222) { // Set point
 				sendEvent(name: "thermostatSetpoint", value: values[0]/10)
 				sendEvent(name: "heatingSetpoint", value: values[0]/10)
-				//sendEvent(name: "coolingSetpoint", value: values[0]/10)
-
 			}
 
 			if (device.currentValue("readRegister") == 352) { // Rotor state
@@ -418,7 +459,7 @@ def parse_MODBUS(byte[] frame, lenght, transaction_identifier=0) {
 
 		writtenRegister = writtenRegister + 1
 
-		if (writtenRegister == state.register && writtenValue == state.value) {
+		if (writtenRegister == device.currentValue("readRegister") && writtenValue == device.currentValue("registerValue")) {
 			debug "Value ($writtenValue) successfully written to register: $writtenRegister"
 			sendEvent(name: "lastWriteActionStatus", value: "OK, transaction: $transaction_identifier")
 		} else {
