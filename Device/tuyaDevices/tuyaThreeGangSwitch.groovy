@@ -1,4 +1,6 @@
 /**
+ * IMPORT URL: https://raw.githubusercontent.com/ivarho/hubitatappndevice/master/Device/tuyaDevices/tuyaThreeGangSwitch.groovy
+ *
  * Copyright 2022 Ivar Holand
  *
  * Licensed under the Apache License, Version 2.0 (the "License");

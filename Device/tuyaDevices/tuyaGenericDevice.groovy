@@ -1,4 +1,6 @@
 /**
+ * IMPORT URL: https://raw.githubusercontent.com/ivarho/hubitatappndevice/master/Device/tuyaDevices/tuyaGenericDevice.groovy
+ *
  * Copyright 2020-2023 Ivar Holand
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
