@@ -26,6 +26,7 @@ metadata {
 		capability "LevelPreset"
 		capability "SwitchLevel"
 		capability "Switch"
+		capability "LightEffects"
 
 		command "status"
 
@@ -189,6 +190,51 @@ def presetLevel(level) {
 
 def setLevel(level, duration=null) {
 	presetLevel(level)
+}
+
+def setEffect(effectnumber) {
+	state.effectnumber = effectnumber.intValue()
+
+	// Thanks to neerav.modi on the Hubitat forum for suggesting this feature and the scene information
+	lightEffects = [
+	0 : "000e0d0000000000000000c803e8", // Good night
+	1 : "010e0d0000000000000003e803e8", // Reading
+	2 : "020e0d0000000000000003e803e8", // Working
+	3 : "030e0d0000000000000001f403e8", // Leisure
+	4 : "04464602007803e803e800000000464602007803e8000a00000000", // Grassland
+	5 : "06464601000003e803e800000000464601007803e803e80000000046460100f003e803e800000000", // Dazzling (flash between red, green, blue)
+	6 : "c9646401000000000000022503e8646401016003e803e800000000"] // Flashing between some shade of white and red
+
+	def setMap = [:]
+
+	setMap[21] = "scene"
+
+	setMap[25] = lightEffects[effectnumber.intValue()]
+
+	state.payload += setMap
+	runInMillis(250, 'sendSetMessage')
+}
+
+def setNextEffect() {
+	def temp = state.effectnumber
+	temp = temp + 1
+
+	if (temp > 6) {
+		temp = 0
+	}
+
+	setEffect(temp)
+}
+
+def setPreviousEffect() {
+	def temp = state.effectnumber
+	temp = temp - 1
+
+	if (temp < 0) {
+		temp = 6
+	}
+
+	setEffect(temp)
 }
 
 def refresh() {
@@ -502,7 +548,6 @@ def generate_payload(command, data=null) {
 		json_payload = tuyaProtVersionStr + hexdig + encrypted_payload
 
 	} else if (tuyaProtVersion == "33" || tuyaProtVersion == "34") {
-	} else if (tuyaProtVersion == "33") {
 		encrypted_payload = encrypt(json_payload, settings.localKey, false)
 
 		if (logEnable) log.debug encrypted_payload
