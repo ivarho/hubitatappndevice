@@ -43,6 +43,7 @@ preferences {
 		input name: "logEnable", type: "bool", title: "Enable debug logging", defaultValue: true
 		input "tuyaProtVersion", "enum", title: "Select tuya protocol version: ", required: true, options: [31: "3.1", 33 : "3.3", 34: "3.4 (experimental)"]
 		input name: "poll_interval", type: "enum", title: "Configure poll interval:", options: [0: "No polling", 5: "Every 5 second", 10: "Every 10 second", 15: "Every 15 second", 20: "Every 20 second", 30: "Every 30 second", 60: "Every 1 min", 120: "Every 2 min", 180: "Every 3 min"]
+		input name: "color_mode", type: "enum", title: "Configure bulb color mode:", options: ["hsv": "HSV (native Hubitat)", "hsl": "HSL"]
 	}
 }
 
@@ -137,7 +138,11 @@ def setColor(colormap) {
 	// https://developer.tuya.com/en/docs/iot/generic-light-bulb-template?id=Kag3g03a9vy81
 	// however, correct color is only achived by using HSL color value. This could also
 	// be a Ledvance issue. So other bulbs, might or might not need conversion to HSV
-	colormap = hsvToHsl(colormap.hue, colormap.saturation, colormap.level)
+	if (color_mode == "hsl") {
+		colormap = hsvToHsl(colormap.hue, colormap.saturation, colormap.level)
+	} else if (color_mode == "hsv") {
+		colormap = colormap
+	}
 
 	Integer bHue = colormap.hue * 3.6
 	Integer bSat = colormap.saturation*10
