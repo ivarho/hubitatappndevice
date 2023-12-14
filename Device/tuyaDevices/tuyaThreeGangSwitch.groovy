@@ -34,7 +34,7 @@ preferences {
 		input "localKey", "text", title: "Device local key:", required: false
 		input name: "logEnable", type: "bool", title: "Enable debug logging", defaultValue: true
 		input "endpoint", "text", title: "End point to control: ", required: true
-		input "tuyaProtVersion", "enum", title: "Select tuya protocol version: ", required: true, options: [31: "3.1", 33 : "3.3"]
+		input "tuyaProtVersion", "enum", title: "Select tuya protocol version: ", required: true, options: [31: "3.1", 33 : "3.3", 34: "3.4 (experimental)"]
 		input name: "pull_interval", type: "enum", title: "Configure pull interval (parent device only):", options: [0: "No polling", 1:"Every 1 second", 2:"Every 2 second", 3: "Every 3 second", 5: "Every 5 second", 10: "Every 10 second", 15: "Every 15 second", 20: "Every 20 second", 30: "Every 30 second", 60: "Every 1 min", 120: "Every 2 min", 180: "Every 3 min"]
 	}
 }
@@ -150,15 +150,35 @@ def parse(String description) {
 		def message_type = msg_byte[11].toInteger()
 
 		if (message_type == 7) {
-			// Incoming control message
+			if (msg_byte.size() > 51) {
+				// Incoming control message
+				// Find protocol version
+				byte[] ver_bytes = [msg_byte[48], msg_byte[49], msg_byte[50]]
+				protocol_version = new String(ver_bytes)
+
+				if (protocol_version == "3.1") {
+					message_start = 67
+				} else if (protocol_version == "3.3" || protocol_version == "3.4") {
+					message_start = 63
+				}
+			} else {
+				// Assume protocol 3.3
+				protocol_version == "3.3"
+			}
+		} else if (message_type == 8 && msg_byte.size() > 23) {
+			// Incoming status message
 			// Find protocol version
-			byte[] ver_bytes = [msg_byte[48], msg_byte[49], msg_byte[50]]
+			byte[] ver_bytes = [msg_byte[20], msg_byte[21], msg_byte[22]]
 			protocol_version = new String(ver_bytes)
+
+			if (logEnable) log.debug("Protocol version: " + protocol_version)
 
 			if (protocol_version == "3.1") {
 				message_start = 67
-			} else if (protocol_version == "3.3") {
-				message_start = 63
+			} else if (protocol_version == "3.3" || protocol_version == "3.4") {
+				message_start = 35
+			} else {
+				log.error("Device firmware version not supported, protocol verison" + protocol_version)
 			}
 
 		} else if (message_type == 10) {
@@ -195,7 +215,7 @@ def parse(String description) {
 
 		if (protocol_version == "3.1") {
 			dec_status = decrypt_bytes(payload, settings.localKey, true)
-		} else if (protocol_version == "3.3") {
+		} else if (protocol_version == "3.3" || protocol_version == "3.4") {
 			dec_status = decrypt_bytes(payload, settings.localKey, false)
 		}
 
@@ -291,6 +311,20 @@ def send(byte[] message) {
 
 def generate_payload(command, data=null) {
 
+	String tuyaProtVersionStr = ""
+
+	switch (tuyaProtVersion) {
+		case "31":
+			tuyaProtVersionStr = "3.1"
+			break
+		case "33":
+			tuyaProtVersionStr = "3.3"
+			break
+		case "34":
+			tuyaProtVersionStr = "3.4"
+			break
+	}
+
 	def json = new groovy.json.JsonBuilder()
 
 	json_data = payload()["device"][command]["command"]
@@ -332,7 +366,7 @@ def generate_payload(command, data=null) {
 
 		if (logEnable) log.debug "Encrypted payload: " + hubitat.helper.HexUtils.byteArrayToHexString(encrypted_payload.getBytes())
 
-		preMd5String = "data=" + encrypted_payload + "||lpv=" + "3.1" + "||" + settings.localKey
+		preMd5String = "data=" + encrypted_payload + "||lpv=" + tuyaProtVersionStr + "||" + settings.localKey
 
 		if (logEnable) log.debug "preMd5String" + preMd5String
 
@@ -340,7 +374,7 @@ def generate_payload(command, data=null) {
 
 		hexdig = new String(hexdigest[8..-9].getBytes("UTF-8"), "ISO-8859-1")
 
-		json_payload = "3.1" + hexdig + encrypted_payload
+		json_payload = tuyaProtVersionStr + hexdig + encrypted_payload
 
 	} else if (tuyaProtVersion == "33") {
 		encrypted_payload = encrypt(json_payload, settings.localKey, false)
@@ -348,7 +382,7 @@ def generate_payload(command, data=null) {
 		if (logEnable) log.debug encrypted_payload
 
 		if (command != "status" && command != "12") {
-			output.write("3.3".getBytes())
+			output.write(tuyaProtVersionStr.getBytes())
 			output.write("\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000".getBytes())
 			output.write(hubitat.helper.HexUtils.hexStringToByteArray(encrypted_payload))
 		} else {
