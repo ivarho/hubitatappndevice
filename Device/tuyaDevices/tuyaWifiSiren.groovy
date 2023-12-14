@@ -1,4 +1,6 @@
 /**
+ * IMPORT URL: https://raw.githubusercontent.com/ivarho/hubitatappndevice/master/Device/tuyaDevices/tuyaWifiSiren.groovy 
+ *
  * Copyright 2020-2022 Ivar Holand
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
