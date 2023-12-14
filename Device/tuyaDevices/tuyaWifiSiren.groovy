@@ -1,5 +1,5 @@
 /**
- * IMPORT URL: https://raw.githubusercontent.com/ivarho/hubitatappndevice/master/Device/tuyaDevices/tuyaWifiSiren.groovy 
+ * IMPORT URL: https://raw.githubusercontent.com/ivarho/hubitatappndevice/master/Device/tuyaDevices/tuyaWifiSiren.groovy
  *
  * Copyright 2020-2022 Ivar Holand
  *
@@ -371,7 +371,7 @@ def generate_payload(command, data=null) {
 
 		json_payload = tuyaProtVersionStr + hexdig + encrypted_payload
 
-	} else if (tuyaProtVersion == "33") {
+	} else if (tuyaProtVersion == "33" || tuyaProtVersion == "34") {
 		encrypted_payload = encrypt(json_payload, settings.localKey, false)
 
 		if (logEnable) log.debug encrypted_payload

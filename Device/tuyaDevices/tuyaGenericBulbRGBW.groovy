@@ -501,6 +501,7 @@ def generate_payload(command, data=null) {
 
 		json_payload = tuyaProtVersionStr + hexdig + encrypted_payload
 
+	} else if (tuyaProtVersion == "33" || tuyaProtVersion == "34") {
 	} else if (tuyaProtVersion == "33") {
 		encrypted_payload = encrypt(json_payload, settings.localKey, false)
 
