@@ -29,6 +29,7 @@ metadata {
 		capability "ThermostatMode"
 		capability "ThermostatOperatingState"
 		capability "Polling"
+        capability "RelativeHumidityMeasurement"
 
 		attribute "registerValue", "number"
 		attribute "lastWriteActionStatus", "string"
@@ -40,6 +41,9 @@ metadata {
 		attribute "outdoorAir", "number"
 		attribute "frostProtSensor", "number"
 		attribute "targetSetpoint", "number"
+		attribute "restoreSetpoint", "number"
+        attribute "filterPeriodDays", "number"
+        attribute "filterUsed", "string"
 
 		command "sendTestData"
 		command "closeConnection"
@@ -74,6 +78,8 @@ def initialize()
 }
 
 def updated () {
+	debug "Updated"
+
 	state.transactionIdentifier = 0
 
 	state.commands = []
@@ -83,8 +89,11 @@ def updated () {
 	//speed - ENUM ["low","medium-low","medium","medium-high","high","on","off","auto"]
 	sendEvent(name: "speed", value: "medium")
 
-	groovy.json.JsonBuilder fanSpeeds = new groovy.json.JsonBuilder(["low","medium","high"])
-	sendEvent([name: "supportedFanSpeeds", value: fanSpeeds])
+	//groovy.json.JsonBuilder fanSpeeds = new groovy.json.JsonBuilder(["low","medium","high"])
+	sendEvent(name: "supportedFanSpeeds", value: new groovy.json.JsonBuilder(["low", "medium", "high"]))
+
+	sendEvent(name: "supportedThermostatModes", value: new groovy.json.JsonBuilder(["auto", "cool", "boost"]))
+	sendEvent(name: "supportedThermostatFanModes", value: new groovy.json.JsonBuilder(["on", "auto"]))
 
 	sendEvent(name: "filterStatus", value: "normal") // filterStatus - ENUM ["normal", "replace"]
 
@@ -124,6 +133,8 @@ def poll() {
 	readSetPoint()
 	readRotorState()
 	readSpeed()
+    readRH()
+    readFilterDays()
 }
 
 def readSpeed()
@@ -144,6 +155,17 @@ def readSetPoint()
 def readRotorState()
 {
 	readRegisterValue(352)
+}
+
+def readRH()
+{
+    readRegisterValue(381)
+}
+
+def readFilterDays()
+{
+    readRegisterValue(601) // Filter period in months
+    readRegisterValue(602) // Filter used number of days
 }
 
 def setHeatingSetpoint(temperature) {
@@ -177,13 +199,27 @@ def setSetpoint(temperature) {
 }
 
 def setThermostatMode(mode) {
+	debug "Setting thermostat mode $mode"
+
+	if (mode == "cool") {
+		cool()
+	} else if (mode == "auto") {
+		unschedule(auto)
+		auto()
+    } else if (mode == "boost") {
+        boost()
+    }
+
+	poll()
 }
 
 def setThermostatFanMode(mode) {
+	debug "Setting fan mode $mode"
 }
 
 def auto(){
-	setSetpoint(16)
+	debug "Auto mode"
+	setSetpoint(device.currentValue("restoreSetpoint"))
 	setSpeed("medium")
 }
 
@@ -197,10 +233,23 @@ def emergencyHeat() {
 }
 
 def cool() {
+	debug "Setting Cool mode"
+
+	sendEvent(name: "restoreSetpoint", value: device.currentValue("thermostatSetpoint"))
+
 	setSetpoint(0)
 	setSpeed("high")
 
 	runIn(30*60, auto)
+}
+
+def boost() {
+    debug "Setting boost mode"
+
+    sendEvent(name: "restoreSetpoint", value: device.currentValue("thermostatSetpoint"))
+
+    setSpeed("high")
+    runIn(30*60, auto)
 }
 
 def cycleSpeed() {
@@ -246,7 +295,7 @@ def sendFromBuffer() {
 
 def sendTimeout() {
 	log.error "Timeout on sending, no response from VSR"
-	runInMillis(100, sendFromBuffer) // Retry
+	runInMillis(1000, sendFromBuffer) // Retry
 }
 
 def readRegisterValue(register=settings.client_register, numRegs=1) {
@@ -300,6 +349,11 @@ def createTcpModbusFrame(byte[] modbusFrame) {
 
 	transactionIdentifier = state.transactionIdentifier
 	state.transactionIdentifier = transactionIdentifier + 1
+
+	if (transactionIdentifier > (65536)) {
+		state.transactionIdentifier = 0
+		transactionIdentifier = 0
+	}
 
 	length = modbusFrame.size()
 
@@ -452,6 +506,30 @@ def parse_MODBUS(byte[] frame, lenght, transaction_identifier=0) {
 					sendEvent(name: "thermostatOperatingState", value: "fan only")
 				}
 			}
+
+            if (device.currentValue("readRegister") == 381) { // Relative humidity, RH
+                sendEvent(name: "humidity", value: values[0])
+            }
+
+            if (device.currentValue("readRegister") == 601) { // Filter period in months
+                sendEvent(name: "filterPeriodDays", value: values[0] * (365.25/12))
+            }
+
+            if (device.currentValue("readRegister") == 602) { // Filter used for days
+                filterStatus = (values[0] / device.currentValue("filterPeriodDays")) * 100
+
+                filterStatus = (filterStatus as float).round(0)
+
+                if (filterStatus > 100) {
+                    sendEvent(name: "filterStatus", value: "replace")
+                } else {
+                    sendEvent(name: "filterStatus", value: "normal")
+                }
+
+                debug "FilterStatus: $filterStatus"
+
+                sendEvent(name: "filterUsed", value: "Filter used: $filterStatus %")
+            }
 		}
 	} else if (function_code == 0x06) {
 		int writtenRegister = new BigInteger([frame[2], frame[3]] as byte[]).intValue()
