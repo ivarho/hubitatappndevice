@@ -570,8 +570,10 @@ def generate_payload(command, data=null) {
 			output.write(hubitat.helper.HexUtils.hexStringToByteArray(encrypted_payload))
 		}
 	} else if (tuyaProtVersion == "34") {
-		new_payload = "3.4\0\0\0\0\0\0\0\0\0\0\0\0" + json_payload
-		json_payload = new_payload
+		if (command != "status") {
+			new_payload = "3.4\0\0\0\0\0\0\0\0\0\0\0\0" + json_payload
+			json_payload = new_payload
+		}
 		encrypted_payload = encrypt(json_payload, settings.localKey, false)
 		output.write(hubitat.helper.HexUtils.hexStringToByteArray(encrypted_payload))
 	}
