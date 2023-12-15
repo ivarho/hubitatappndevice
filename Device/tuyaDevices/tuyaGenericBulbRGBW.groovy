@@ -480,25 +480,31 @@ def send(byte[] message) {
 	}
 }
 
+import javax.crypto.Mac
+
 def generate_payload(command, data=null) {
 
 	String tuyaProtVersionStr = ""
 
+	def json = new groovy.json.JsonBuilder()
+
 	switch (tuyaProtVersion) {
 		case "31":
 			tuyaProtVersionStr = "3.1"
+			payloadFormat = "device"
 			break
 		case "33":
 			tuyaProtVersionStr = "3.3"
+			payloadFormat = "device"
 			break
 		case "34":
 			tuyaProtVersionStr = "3.4"
+			payloadFormat = "v3.4"
+
 			break
 	}
 
-	def json = new groovy.json.JsonBuilder()
-
-	json_data = payload()["device"][command]["command"]
+	json_data = payload()[payloadFormat][command]["command"]
 
 	if (json_data.containsKey("gwId")) {
 		json_data["gwId"] = settings.devId
@@ -512,11 +518,15 @@ def generate_payload(command, data=null) {
 	if (json_data.containsKey("t")) {
 		Date now = new Date()
 		json_data["t"] = (now.getTime()/1000).toInteger().toString()
-		//json_data["t"] = "1602184793" // for testing
+		//json_data["t"] = "1702671803" // for testing
 	}
 
 	if (data != null) {
-		json_data["dps"] = data
+		if (json_data.containsKey("data")) {
+			json_data["data"] = ["dps" : data]
+		} else {
+			json_data["dps"] = data
+		}
 	}
 
 	json json_data
@@ -547,7 +557,7 @@ def generate_payload(command, data=null) {
 
 		json_payload = tuyaProtVersionStr + hexdig + encrypted_payload
 
-	} else if (tuyaProtVersion == "33" || tuyaProtVersion == "34") {
+	} else if (tuyaProtVersion == "33") {
 		encrypted_payload = encrypt(json_payload, settings.localKey, false)
 
 		if (logEnable) log.debug encrypted_payload
@@ -559,6 +569,11 @@ def generate_payload(command, data=null) {
 		} else {
 			output.write(hubitat.helper.HexUtils.hexStringToByteArray(encrypted_payload))
 		}
+	} else if (tuyaProtVersion == "34") {
+		new_payload = "3.4\0\0\0\0\0\0\0\0\0\0\0\0" + json_payload
+		json_payload = new_payload
+		encrypted_payload = encrypt(json_payload, settings.localKey, false)
+		output.write(hubitat.helper.HexUtils.hexStringToByteArray(encrypted_payload))
 	}
 
 	if (tuyaProtVersion == "31") {
@@ -567,7 +582,7 @@ def generate_payload(command, data=null) {
 
 	if (logEnable) log.debug "payload after=" + json_payload
 
-	output.write(hubitat.helper.HexUtils.hexStringToByteArray(payload()["device"]["suffix"]))
+	output.write(hubitat.helper.HexUtils.hexStringToByteArray(payload()[payloadFormat]["suffix"]))
 
 	byte[] bff = output.toByteArray()
 
@@ -577,38 +592,63 @@ def generate_payload(command, data=null) {
 
 	postfix_payload_hex_len = postfix_payload.size()
 
+	if (tuyaProtVersion == "34") {
+		// SHA252 is used as data integrity check not CRC32, i.e. need to add 256 bits = 32 bytes to the length
+		postfix_payload_hex_len = postfix_payload_hex_len + 32
+	}
+
 	if (logEnable) log.debug postfix_payload_hex_len
 
-	if (logEnable) log.debug "Prefix: " + hubitat.helper.HexUtils.byteArrayToHexString(hubitat.helper.HexUtils.hexStringToByteArray(payload()["device"]["prefix"]))
+	if (logEnable) log.debug "Prefix: " + hubitat.helper.HexUtils.byteArrayToHexString(hubitat.helper.HexUtils.hexStringToByteArray(payload()[payloadFormat]["prefix"]))
 
-	output = new ByteArrayOutputStream();
+	output = new ByteArrayOutputStream()
 
-	output.write(hubitat.helper.HexUtils.hexStringToByteArray(payload()["device"]["prefix"]))
-	output.write(hubitat.helper.HexUtils.hexStringToByteArray(payload()["device"][command]["hexByte"]))
+	output.write(hubitat.helper.HexUtils.hexStringToByteArray(payload()[payloadFormat]["prefix"]))
+	output.write(hubitat.helper.HexUtils.hexStringToByteArray(payload()[payloadFormat][command]["hexByte"]))
 	output.write(hubitat.helper.HexUtils.hexStringToByteArray("000000"))
 	output.write(postfix_payload_hex_len)
 	output.write(postfix_payload)
 
 	byte[] buf = output.toByteArray()
 
-	crc32 = CRC32b(buf, buf.size()-8) & 0xffffffff
-	if (logEnable) log.debug buf.size()
+	if (tuyaProtVersion == "34") {
+		Mac sha256_hmac = Mac.getInstance("HmacSHA256")
+		secret = settings.localKey.replaceAll('&lt;', '<')
+		SecretKeySpec key = new SecretKeySpec(secret.getBytes("UTF-8"), "HmacSHA256")
 
-	hex_crc = Long.toHexString(crc32)
+		sha256_hmac.init(key)
+		sha256_hmac.update(buf, 0, buf.size()-4)
+		byte[] digest = sha256_hmac.doFinal()
 
-	if (logEnable) log.debug "HEX crc: $hex_crc : " + hex_crc.size()/2
+		if (logEnable) log.debug("message HMAC SHA256: " + hubitat.helper.HexUtils.byteArrayToHexString(digest))
 
-	// Pad the CRC in case highest byte is 0
-	if (hex_crc.size() < 7) {
-		hex_crc = "00" + hex_crc
+		output2 = new ByteArrayOutputStream()
+		output2.write(buf, 0, buf.size()-4)
+		output2.write(digest)
+		output2.write(hubitat.helper.HexUtils.hexStringToByteArray(payload()[payloadFormat]["suffix"]))
+
+		buf = output2.toByteArray()
+
+	} else {
+		crc32 = CRC32b(buf, buf.size()-8) & 0xffffffff
+		if (logEnable) log.debug buf.size()
+
+		hex_crc = Long.toHexString(crc32)
+
+		if (logEnable) log.debug "HEX crc: $hex_crc : " + hex_crc.size()/2
+
+		// Pad the CRC in case highest byte is 0
+		if (hex_crc.size() < 7) {
+			hex_crc = "00" + hex_crc
+		}
+
+		crc_bytes = hubitat.helper.HexUtils.hexStringToByteArray(hex_crc)
+
+		buf[buf.size()-8] = crc_bytes[0]
+		buf[buf.size()-7] = crc_bytes[1]
+		buf[buf.size()-6] = crc_bytes[2]
+		buf[buf.size()-5] = crc_bytes[3]
 	}
-
-	crc_bytes = hubitat.helper.HexUtils.hexStringToByteArray(hex_crc)
-
-	buf[buf.size()-8] = crc_bytes[0]
-	buf[buf.size()-7] = crc_bytes[1]
-	buf[buf.size()-6] = crc_bytes[2]
-	buf[buf.size()-5] = crc_bytes[3]
 
 	return buf
 }
@@ -628,6 +668,18 @@ def payload()
 			],
 			"prefix": "000055aa00000000000000",
 			"suffix": "000000000000aa55"
+		],
+		"v3.4": [
+			"status": [
+				"hexByte": "10",
+				"command": [:]
+			],
+			"set": [
+				"hexByte": "0d",
+				"command": ["protocol":5,"t":"","data":""]
+			],
+			"prefix": "000055aa00000000000000",
+			"suffix": "0000aa55"
 		]
 	]
 
