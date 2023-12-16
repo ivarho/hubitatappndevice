@@ -284,6 +284,67 @@ def sendSetMessage() {
 	state.payload = [:]
 }
 
+def device_specific_parser(Object status_object) {
+
+	// Switch status (on / off)
+	if (status_object.dps.containsKey("20")) {
+		if (status_object.dps["20"] == true) {
+			sendEvent(name: "switch", value : "on")
+		} else {
+			sendEvent(name: "switch", value : "off")
+		}
+	}
+
+	// Bulb Mode
+	if (status_object.dps.containsKey("21")) {
+		if (status_object.dps["21"] == "white") {
+			sendEvent(name: "colorMode", value : "CT")
+		} else if (status_object.dps["21"] == "colour") {
+			sendEvent(name: "colorMode", value : "RGB")
+		} else {
+			sendEvent(name: "colorMode", value : "EFFECTS")
+		}
+	}
+
+	// Brightness
+	if (status_object.dps.containsKey("22")) {
+		sendEvent(name: "presetLevel", value : status_object.dps["22"]/10)
+		sendEvent(name: "level", value : status_object.dps["22"]/10)
+	}
+
+	// Color temperature
+	if (status_object.dps.containsKey("23")) {
+
+		Integer colortemperature = (status_object.dps["23"] + (2700/3.8))*3.8
+
+		sendEvent(name: "colorTemperature", value : colortemperature)
+	}
+
+	// Color information
+	if (status_object.dps.containsKey("24")) {
+		// Hue
+		def hueStr = status_object.dps["24"].substring(0,4)
+		Float hue_fl = Integer.parseInt(hueStr, 16)/3.6
+		Integer hue = hue_fl.round(0)
+
+		// Saturation
+		def satStr = status_object.dps["24"].substring(5,8)
+		def sat = Integer.parseInt(satStr, 16)/10
+
+		// Level
+		def levelStr = status_object.dps["24"].substring(9,12)
+		def level = Integer.parseInt(levelStr, 16)/10
+
+		// Bug in Hubitat: Hubitat stores colors as HSV, however documents claim HSL. The tuya
+		// Ledvance bulb I have store color information in HSL, hence need to convert.
+		def colormap = hslToHsv(hue, sat, level)
+
+		sendEvent(name: "hue", value : colormap.hue)
+		sendEvent(name: "saturation", value : colormap.saturation)
+		sendEvent(name: "level", value : colormap.value)
+	}
+}
+
 def parse(String description) {
 	if (logEnable) log.debug "Receiving message from device"
 	if (logEnable) log.debug(description)
@@ -387,74 +448,14 @@ def parse(String description) {
 		status = dec_status
 	}
 
-	def jsonSlurper = new groovy.json.JsonSlurper()
-
-	if (status != Null && status != "") {
+	if (status != null && status != "") {
+		def jsonSlurper = new groovy.json.JsonSlurper()
 		def status_object = jsonSlurper.parseText(status)
-
-		// Switch status (on / off)
-		if (status_object.dps.containsKey("20")) {
-			if (status_object.dps["20"] == true) {
-				sendEvent(name: "switch", value : "on")
-			} else {
-				sendEvent(name: "switch", value : "off")
-			}
-		}
-
-		// Bulb Mode
-		if (status_object.dps.containsKey("21")) {
-			if (status_object.dps["21"] == "white") {
-				sendEvent(name: "colorMode", value : "CT")
-			} else if (status_object.dps["21"] == "colour") {
-				sendEvent(name: "colorMode", value : "RGB")
-			} else {
-				sendEvent(name: "colorMode", value : "EFFECTS")
-			}
-		}
-
-		// Brightness
-		if (status_object.dps.containsKey("22")) {
-			sendEvent(name: "presetLevel", value : status_object.dps["22"]/10)
-			sendEvent(name: "level", value : status_object.dps["22"]/10)
-		}
-
-		// Color temperature
-		if (status_object.dps.containsKey("23")) {
-
-			Integer colortemperature = (status_object.dps["23"] + (2700/3.8))*3.8
-
-			sendEvent(name: "colorTemperature", value : colortemperature)
-		}
-
-		// Color information
-		if (status_object.dps.containsKey("24")) {
-			// Hue
-			def hueStr = status_object.dps["24"].substring(0,4)
-			Float hue_fl = Integer.parseInt(hueStr, 16)/3.6
-			Integer hue = hue_fl.round(0)
-
-			// Saturation
-			def satStr = status_object.dps["24"].substring(5,8)
-			def sat = Integer.parseInt(satStr, 16)/10
-
-			// Level
-			def levelStr = status_object.dps["24"].substring(9,12)
-			def level = Integer.parseInt(levelStr, 16)/10
-
-			// Bug in Hubitat: Hubitat stores colors as HSV, however documents claim HSL. The tuya
-			// Ledvance bulb I have store color information in HSL, hence need to convert.
-			def colormap = hslToHsv(hue, sat, level)
-
-			sendEvent(name: "hue", value : colormap.hue)
-			sendEvent(name: "saturation", value : colormap.saturation)
-			sendEvent(name: "level", value : colormap.value)
-		}
-
+		device_specific_parser(status_object)
 		sendEvent(name: "rawMessage", value: status_object.dps)
-
 	} else {
 		// Message did not contain data, bulb received unknown command?
-		log.debug "Bulb did not understand command"
+		log.error "Device did not understand command"
 	}
 
 	try {
