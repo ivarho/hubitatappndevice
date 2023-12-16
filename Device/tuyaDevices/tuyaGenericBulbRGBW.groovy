@@ -29,10 +29,8 @@ metadata {
 		capability "LightEffects"
 
 		command "status"
-
-		command "DriverSelfTest"
-
 		command "SendCustomDataToDevice", [[name:"endpoint*", type:"NUMBER", description:"To which endpint(dps) do you want the data to be sent"], [name:"data*", type:"STRING", description:"the data to be sent, treated as string, but true and false is converted"]]
+		command "DriverSelfTest"
 
 		attribute "rawMessage", "String"
 	}
@@ -286,63 +284,6 @@ def sendSetMessage() {
 	state.payload = [:]
 }
 
-def DriverSelfTestReport(testName, generated, expected) {
-	boolean retValue = false
-
-	log.debug "Generated " + hubitat.helper.HexUtils.byteArrayToHexString(generatedTestVector)
-	log.debug "Expected " + expected
-
-	if (hubitat.helper.HexUtils.byteArrayToHexString(generatedTestVector) == expected) {
-		log.info "$testName: Test passed"
-		sendEvent(name: "DriverSelfTest_$testName", value: "OK")
-		retValue = true
-	} else {
-		log.error "$testName: Test failed! The generated message does not match the expected output"
-		sendEvent(name: "DriverSelfTest_$testName", value: "FAIL")
-	}
-
-	return retValue
-}
-
-def DriverSelfTest() {
-	log.info "********** Starting driver self test *******************"
-
-	state.clear()
-	// Need to make sure to have this variable
-	state.payload = [:]
-
-	// Testing 3.1 set message
-	expected = "000055AA0000000000000007000000B3332E313365666533353337353164353333323070306A6A4A75744C704839416F324B566F76424E55492B4A78527649334E5833305039794D594A6E33703842704B456A737767354C332B7849343638314B5277434F484C366B374B3543375A362F58766D6A7665714446736F714E31792B31584A53707542766D5A4337567371644944336A386A393354387944526154664A45486150516E784C394844625948754A63634A636E33773D3D1A3578640000AA55"
-	generatedTestVector = generate_payload("set", ["20": true], "1702671803", localKey="7ae83ffe1980sa3c", devid="bfd733c97d1bfc88b3sysa", tuyaVersion="31")
-	DriverSelfTestReport("SetMessageV3_1", generatedTestVector, expected)
-
-	// Testing 3.1 status message
-	expected = "000055AA000000000000000A0000007A7B2267774964223A2262666437333363393764316266633838623373797361222C226465764964223A2262666437333363393764316266633838623373797361222C22756964223A2262666437333363393764316266633838623373797361222C2274223A2231373032363731383033227DCA1E0CC60000AA55"
-	generatedTestVector = generate_payload("status", data=null, "1702671803", localKey="7ae83ffe1980sa3c", devid="bfd733c97d1bfc88b3sysa", tuyaVersion="31")
-	DriverSelfTestReport("StatusMessageV3_1", generatedTestVector, expected)
-
-	// Testing 3.3 set message
-	expected = "000055AA000000000000000700000087332E33000000000000000000000000A748E326EB4BA47F40A36295A2F04D508F89C51BC8DCD5F7D0FF72318267DE9F01A4A123B308392F7FB1238EBCD4A47008E1CBEA4ECAE42ED9EBF5EF9A3BDEA8316CA2A375CBED57252A6E06F9990BB56CA9D203DE3F23F774FCC8345A4DF2441DA3D09F12FD1C36D81EE25C709727DF2E5CF2B30000AA55"
-	generatedTestVector = generate_payload("set", ["20": true], "1702671803", localKey="7ae83ffe1980sa3c", devid="bfd733c97d1bfc88b3sysa", tuyaVersion="33")
-	DriverSelfTestReport("SetMessageV3_3", generatedTestVector, expected)
-
-	// Testing 3.3 status message
-	expected = "000055AA000000000000000A00000088D0436FF6B453B07DC2CC8084484A8E3E08E1CBEA4ECAE42ED9EBF5EF9A3BDEA834A1D6E20760F13A0CF9DE1523730E598F89C51BC8DCD5F7D0FF72318267DE9F01A4A123B308392F7FB1238EBCD4A47008E1CBEA4ECAE42ED9EBF5EF9A3BDEA8316CA2A375CBED57252A6E06F9990BB543FF054E84050A495D427D28A8C0F29F0104C4D70000AA55"
-	generatedTestVector = generate_payload("status", data=null, "1702671803", localKey="7ae83ffe1980sa3c", devid="bfd733c97d1bfc88b3sysa", tuyaVersion="33")
-	DriverSelfTestReport("StatusMessageV3_3", generatedTestVector, expected)
-
-
-	// Testing 3.4 set message
-	expected = "000055AA000000000000000D000000749AC0971A69B046C19DDFEAB6800CBB66A8FC70BDD2FF855511A3A2CBF2955BFC806C9FBFFA10ED709EC2BA4D8EC24609E50317C707468F02A110E429BA321FAA3862640A83699215E1313BA653C6DA0E5F01AADD72E172D7705B0AF82BFCD5E54A92562659A18235AEF0DDB1453BB7070000AA55"
-	generatedTestVector = generate_payload("set", ["20": true], "1702671803", localKey="7ae83ffe1980sa3c", devid="bfd733c97d1bfc88b3sysa", tuyaVersion="34")
-	DriverSelfTestReport("SetMessageV3_4", generatedTestVector, expected)
-
-	// Testing 3.4 status message
-	expected = "000055AA000000000000001000000034A78158A05A786D32FEC14903A94445B47BEA54632DA130BAB31B719A8C21AB419104665404C82C85BDB55DCA068791F60000AA55"
-	generatedTestVector = generate_payload("status", data=null, "1702671803", localKey="7ae83ffe1980sa3c", devid="bfd733c97d1bfc88b3sysa", tuyaVersion="34")
-	DriverSelfTestReport("StatusMessageV3_4", generatedTestVector, expected)
-}
-
 def parse(String description) {
 	if (logEnable) log.debug "Receiving message from device"
 	if (logEnable) log.debug(description)
@@ -523,18 +464,69 @@ def parse(String description) {
 	}
 }
 
-def socketStatus(socetStatusMsg) {
-	log.debug "Socket status message received:" + socetStatusMsg
-}
-
 def status() {
 	send(generate_payload("status"))
 }
 
+def hslToHsv(hue, saturation, level)
+{
+	if (logEnable) log.debug ("HSL to HSV")
+	if (logEnable) log.debug ("${hue}, ${saturation}, ${level}")
 
+	// hue = hue
+	level = (level/100) * 2
+
+	saturation = (saturation/100) * ((level <= 1) ? level : 2 - level)
+
+	//ss *= (ll <= 100) ? ll : 2 - ll;
+
+	def value = (level + saturation) / 2
+
+	//*v = (ll + ss) / 2;
+
+	def sat = (2 * saturation) / (level + saturation)
+	//*s = (2 * ss) / (ll + ss);
+
+	def retMap = ["hue": hue, "saturation": (sat*100).intValue(), "value": (value*100).intValue()]
+	if (logEnable) log.debug retMap
+
+	return retMap
+}
+
+def hsvToHsl(hue, saturation, value)
+{
+	if (logEnable) log.debug ("HSV to HSL")
+	if (logEnable) log.debug ("${hue}, ${saturation}, ${value}")
+	//*hh = h;
+
+	def level = (2 - (saturation/100)) * (value/100)
+	//*ll = (2 - s) * v;
+
+	def sat = (saturation/100) * (value/100)
+	//*ss = s * v;
+
+	if (level != 0) {
+		sat = sat / ((level <= 1) ? level : 2 - level)
+		//*ss /= (*ll < = 1) ? (*ll) : 2 - (*ll);
+	}
+
+	level = level / 2
+	//*ll /= 2;
+
+	def retMap = ["hue": hue, "saturation": (sat*100).intValue(), "level": (level*100).intValue()]
+	if (logEnable) log.debug retMap
+
+	return retMap
+}
+
+// ************************************ TUYA PROTOCOL FUNCTIONS *************************************
 
 import hubitat.device.HubAction
 import hubitat.device.Protocol
+
+def socketStatus(socetStatusMsg) {
+	log.debug "Socket status message received:" + socetStatusMsg
+}
 
 def send(byte[] message) {
 	String msg = hubitat.helper.HexUtils.byteArrayToHexString(message)
@@ -550,7 +542,65 @@ def send(byte[] message) {
 	}
 }
 
+def DriverSelfTestReport(testName, generated, expected) {
+	boolean retValue = false
+
+	log.debug "Generated " + hubitat.helper.HexUtils.byteArrayToHexString(generatedTestVector)
+	log.debug "Expected " + expected
+
+	if (hubitat.helper.HexUtils.byteArrayToHexString(generatedTestVector) == expected) {
+		log.info "$testName: Test passed"
+		sendEvent(name: "DriverSelfTest_$testName", value: "OK")
+		retValue = true
+	} else {
+		log.error "$testName: Test failed! The generated message does not match the expected output"
+		sendEvent(name: "DriverSelfTest_$testName", value: "FAIL")
+	}
+
+	return retValue
+}
+
+def DriverSelfTest() {
+	log.info "********** Starting driver self test *******************"
+
+	state.clear()
+	// Need to make sure to have this variable
+	state.payload = [:]
+
+	// Testing 3.1 set message
+	expected = "000055AA0000000000000007000000B3332E313365666533353337353164353333323070306A6A4A75744C704839416F324B566F76424E55492B4A78527649334E5833305039794D594A6E33703842704B456A737767354C332B7849343638314B5277434F484C366B374B3543375A362F58766D6A7665714446736F714E31792B31584A53707542766D5A4337567371644944336A386A393354387944526154664A45486150516E784C394844625948754A63634A636E33773D3D1A3578640000AA55"
+	generatedTestVector = generate_payload("set", ["20": true], "1702671803", localKey="7ae83ffe1980sa3c", devid="bfd733c97d1bfc88b3sysa", tuyaVersion="31")
+	DriverSelfTestReport("SetMessageV3_1", generatedTestVector, expected)
+
+	// Testing 3.1 status message
+	expected = "000055AA000000000000000A0000007A7B2267774964223A2262666437333363393764316266633838623373797361222C226465764964223A2262666437333363393764316266633838623373797361222C22756964223A2262666437333363393764316266633838623373797361222C2274223A2231373032363731383033227DCA1E0CC60000AA55"
+	generatedTestVector = generate_payload("status", data=null, "1702671803", localKey="7ae83ffe1980sa3c", devid="bfd733c97d1bfc88b3sysa", tuyaVersion="31")
+	DriverSelfTestReport("StatusMessageV3_1", generatedTestVector, expected)
+
+	// Testing 3.3 set message
+	expected = "000055AA000000000000000700000087332E33000000000000000000000000A748E326EB4BA47F40A36295A2F04D508F89C51BC8DCD5F7D0FF72318267DE9F01A4A123B308392F7FB1238EBCD4A47008E1CBEA4ECAE42ED9EBF5EF9A3BDEA8316CA2A375CBED57252A6E06F9990BB56CA9D203DE3F23F774FCC8345A4DF2441DA3D09F12FD1C36D81EE25C709727DF2E5CF2B30000AA55"
+	generatedTestVector = generate_payload("set", ["20": true], "1702671803", localKey="7ae83ffe1980sa3c", devid="bfd733c97d1bfc88b3sysa", tuyaVersion="33")
+	DriverSelfTestReport("SetMessageV3_3", generatedTestVector, expected)
+
+	// Testing 3.3 status message
+	expected = "000055AA000000000000000A00000088D0436FF6B453B07DC2CC8084484A8E3E08E1CBEA4ECAE42ED9EBF5EF9A3BDEA834A1D6E20760F13A0CF9DE1523730E598F89C51BC8DCD5F7D0FF72318267DE9F01A4A123B308392F7FB1238EBCD4A47008E1CBEA4ECAE42ED9EBF5EF9A3BDEA8316CA2A375CBED57252A6E06F9990BB543FF054E84050A495D427D28A8C0F29F0104C4D70000AA55"
+	generatedTestVector = generate_payload("status", data=null, "1702671803", localKey="7ae83ffe1980sa3c", devid="bfd733c97d1bfc88b3sysa", tuyaVersion="33")
+	DriverSelfTestReport("StatusMessageV3_3", generatedTestVector, expected)
+
+
+	// Testing 3.4 set message
+	expected = "000055AA000000000000000D000000749AC0971A69B046C19DDFEAB6800CBB66A8FC70BDD2FF855511A3A2CBF2955BFC806C9FBFFA10ED709EC2BA4D8EC24609E50317C707468F02A110E429BA321FAA3862640A83699215E1313BA653C6DA0E5F01AADD72E172D7705B0AF82BFCD5E54A92562659A18235AEF0DDB1453BB7070000AA55"
+	generatedTestVector = generate_payload("set", ["20": true], "1702671803", localKey="7ae83ffe1980sa3c", devid="bfd733c97d1bfc88b3sysa", tuyaVersion="34")
+	DriverSelfTestReport("SetMessageV3_4", generatedTestVector, expected)
+
+	// Testing 3.4 status message
+	expected = "000055AA000000000000001000000034A78158A05A786D32FEC14903A94445B47BEA54632DA130BAB31B719A8C21AB419104665404C82C85BDB55DCA068791F60000AA55"
+	generatedTestVector = generate_payload("status", data=null, "1702671803", localKey="7ae83ffe1980sa3c", devid="bfd733c97d1bfc88b3sysa", tuyaVersion="34")
+	DriverSelfTestReport("StatusMessageV3_4", generatedTestVector, expected)
+}
+
 import javax.crypto.Mac
+import javax.crypto.spec.SecretKeySpec;
 
 def generate_payload(command, data=null, timestamp=null, localkey=settings.localKey, devid=settings.devId, tuyaVersion=settings.tuyaProtVersion) {
 
@@ -735,7 +785,6 @@ def payload()
 // Huge thank you to MrYutz for posting Groovy AES ecryption drivers for groovy
 //https://community.hubitat.com/t/groovy-aes-encryption-driver/31556
 
-import javax.crypto.spec.SecretKeySpec;
 import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.Cipher
 
@@ -804,55 +853,4 @@ def CRC32b(bytes, length) {
 	}
 
 	return ~crc
-}
-
-def hslToHsv(hue, saturation, level)
-{
-	if (logEnable) log.debug ("HSL to HSV")
-	if (logEnable) log.debug ("${hue}, ${saturation}, ${level}")
-
-	// hue = hue
-	level = (level/100) * 2
-
-	saturation = (saturation/100) * ((level <= 1) ? level : 2 - level)
-
-	//ss *= (ll <= 100) ? ll : 2 - ll;
-
-	def value = (level + saturation) / 2
-
-	//*v = (ll + ss) / 2;
-
-	def sat = (2 * saturation) / (level + saturation)
-	//*s = (2 * ss) / (ll + ss);
-
-	def retMap = ["hue": hue, "saturation": (sat*100).intValue(), "value": (value*100).intValue()]
-	if (logEnable) log.debug retMap
-
-	return retMap
-}
-
-def hsvToHsl(hue, saturation, value)
-{
-	if (logEnable) log.debug ("HSV to HSL")
-	if (logEnable) log.debug ("${hue}, ${saturation}, ${value}")
-	//*hh = h;
-
-	def level = (2 - (saturation/100)) * (value/100)
-	//*ll = (2 - s) * v;
-
-	def sat = (saturation/100) * (value/100)
-	//*ss = s * v;
-
-	if (level != 0) {
-		sat = sat / ((level <= 1) ? level : 2 - level)
-		//*ss /= (*ll < = 1) ? (*ll) : 2 - (*ll);
-	}
-
-	level = level / 2
-	//*ll /= 2;
-
-	def retMap = ["hue": hue, "saturation": (sat*100).intValue(), "level": (level*100).intValue()]
-	if (logEnable) log.debug retMap
-
-	return retMap
 }
