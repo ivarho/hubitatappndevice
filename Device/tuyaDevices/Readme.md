@@ -56,6 +56,9 @@ Here is an example of data coming from the device:
 
 > As far as I can see "set"  message replies contains the version "field" however, "status" messages does not, so I do not have a more elegant way of determining the version on the "status" messages other than clear text meaning 3.1, and encrypted meaning 3.3.
 
+### Version 3.4 Protocol
+Version 3.4 is quite similar to the 3.3 version, except the CRC32 checksum is replaced with a HMAC based on SHA-256. It is also slightly changed what data it uses for encrypting. Driver should have support for sending 3.4 messages, however it is not tested as I do not own a 3.4 device. So the support was developed using the tinytuya python module and comparing its output to what is generated in the driver. You might notice that the drivers have added a Self Test feature. What this does is to generate the message and compare against expected known good data.
+
 ***
 
 ## tuya Wifi Siren
@@ -120,6 +123,6 @@ It seems like window blinds are popular tuya applications. I have added an exper
 
 ## tuya Generic RGBW Driver
 
-By popular demand I have added a tuya driver for a RGBW light bulb. The driver has been developed and tested on a Ledvance CLASSIC A 60 E27 bulb.
+By popular demand I have added a tuya driver for a RGBW light bulb. The driver has been developed and tested on a Ledvance CLASSIC A 60 E27 bulb. The driver allows you to locally control your tuya Wifi enabled RGB(W) light bulb.
 
 A big thank you to Kenneths Teknik for posting this on the home-assistant forum on how to get the secret key for Ledvance products: https://community.home-assistant.io/t/ledvance-integration-this-is-how-to-do-it-as-per-08-22/449783
