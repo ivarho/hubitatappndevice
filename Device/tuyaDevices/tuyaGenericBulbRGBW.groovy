@@ -220,6 +220,11 @@ def setEffect(effectnumber) {
 
 def setNextEffect() {
 	def temp = state.effectnumber
+
+	if (temp == null) {
+		temp = 0
+	}
+
 	temp = temp + 1
 
 	if (temp > 6) {
@@ -231,6 +236,11 @@ def setNextEffect() {
 
 def setPreviousEffect() {
 	def temp = state.effectnumber
+
+	if (temp == null) {
+		temp = 0
+	}
+
 	temp = temp - 1
 
 	if (temp < 0) {
@@ -279,15 +289,15 @@ def sendSetMessage() {
 def DriverSelfTestReport(testName, generated, expected) {
 	boolean retValue = false
 
-	if (logEnable) log.debug "Generated " + hubitat.helper.HexUtils.byteArrayToHexString(generatedTestVector)
-	if (logEnable) log.debug "Expected " + expected
+	log.debug "Generated " + hubitat.helper.HexUtils.byteArrayToHexString(generatedTestVector)
+	log.debug "Expected " + expected
 
 	if (hubitat.helper.HexUtils.byteArrayToHexString(generatedTestVector) == expected) {
-		if (logEnable) log.info "$testName: Test passed"
+		log.info "$testName: Test passed"
 		sendEvent(name: "DriverSelfTest_$testName", value: "OK")
 		retValue = true
 	} else {
-		if (logEnable) log.error "$testName: Test failed! The generated message does not match the expected output"
+		log.error "$testName: Test failed! The generated message does not match the expected output"
 		sendEvent(name: "DriverSelfTest_$testName", value: "FAIL")
 	}
 
@@ -295,7 +305,11 @@ def DriverSelfTestReport(testName, generated, expected) {
 }
 
 def DriverSelfTest() {
-	if (logEnable) log.info "********** Starting driver self test *******************"
+	log.info "********** Starting driver self test *******************"
+
+	state.clear()
+	// Need to make sure to have this variable
+	state.payload = [:]
 
 	// Testing 3.1 set message
 	expected = "000055AA0000000000000007000000B3332E313365666533353337353164353333323070306A6A4A75744C704839416F324B566F76424E55492B4A78527649334E5833305039794D594A6E33703842704B456A737767354C332B7849343638314B5277434F484C366B374B3543375A362F58766D6A7665714446736F714E31792B31584A53707542766D5A4337567371644944336A386A393354387944526154664A45486150516E784C394844625948754A63634A636E33773D3D1A3578640000AA55"
@@ -540,23 +554,13 @@ import javax.crypto.Mac
 
 def generate_payload(command, data=null, timestamp=null, localkey=settings.localKey, devid=settings.devId, tuyaVersion=settings.tuyaProtVersion) {
 
-	String tuyaProtVersionStr = ""
-
-	def json = new groovy.json.JsonBuilder()
-
 	switch (tuyaVersion) {
 		case "31":
-			tuyaProtVersionStr = "3.1"
-			payloadFormat = "v3.1_v3.3"
-			break
 		case "33":
-			tuyaProtVersionStr = "3.3"
 			payloadFormat = "v3.1_v3.3"
 			break
 		case "34":
-			tuyaProtVersionStr = "3.4"
 			payloadFormat = "v3.4"
-
 			break
 	}
 
@@ -589,10 +593,8 @@ def generate_payload(command, data=null, timestamp=null, localkey=settings.local
 		}
 	}
 
-	json json_data
-
-	if (logEnable) log.debug tuyaVersion
-
+	// Clean up json payload for tuya
+	def json = new groovy.json.JsonBuilder(json_data)
 	json_payload = groovy.json.JsonOutput.toJson(json.toString())
 	json_payload = json_payload.replaceAll("\\\\", "")
 	json_payload = json_payload.replaceFirst("\"", "")
@@ -600,76 +602,64 @@ def generate_payload(command, data=null, timestamp=null, localkey=settings.local
 
 	if (logEnable) log.debug "payload before=" + json_payload
 
-	ByteArrayOutputStream output = new ByteArrayOutputStream()
+	// Contruct payload, sometimes encrypted, sometimes clear text, and a mix. Depending on the protocol version
+	ByteArrayOutputStream contructed_payload = new ByteArrayOutputStream()
 
-	if (command == "set" && tuyaVersion == "31") {
-		encrypted_payload = encrypt(json_payload, localkey)
+	if (tuyaVersion == "31") {
+		if (command != "status") {
+			encrypted_payload = encrypt(json_payload, localkey)
 
-		if (logEnable) log.debug "Encrypted payload: " + hubitat.helper.HexUtils.byteArrayToHexString(encrypted_payload.getBytes())
-
-		preMd5String = "data=" + encrypted_payload + "||lpv=" + tuyaProtVersionStr + "||" + localkey
-
-		if (logEnable) log.debug "preMd5String" + preMd5String
-
-		hexdigest = generateMD5(preMd5String)
-
-		hexdig = new String(hexdigest[8..-9].getBytes("UTF-8"), "ISO-8859-1")
-
-		json_payload = tuyaProtVersionStr + hexdig + encrypted_payload
+			if (logEnable) log.debug "Encrypted payload: " + hubitat.helper.HexUtils.byteArrayToHexString(encrypted_payload.getBytes())
+			preMd5String = "data=" + encrypted_payload + "||lpv=" + "3.1" + "||" + localkey
+			if (logEnable) log.debug "preMd5String" + preMd5String
+			hexdigest = generateMD5(preMd5String)
+			hexdig = new String(hexdigest[8..-9].getBytes("UTF-8"), "ISO-8859-1")
+			json_payload = "3.1" + hexdig + encrypted_payload
+		}
+		contructed_payload.write(json_payload.getBytes())
 
 	} else if (tuyaVersion == "33") {
 		encrypted_payload = encrypt(json_payload, localkey, false)
 
 		if (logEnable) log.debug encrypted_payload
 
-		if (command != "status" && command != "12") {
-			output.write(tuyaProtVersionStr.getBytes())
-			output.write("\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000".getBytes())
-			output.write(hubitat.helper.HexUtils.hexStringToByteArray(encrypted_payload))
+		if (command != "status") {
+			contructed_payload.write("3.3\0\0\0\0\0\0\0\0\0\0\0\0".getBytes())
+			contructed_payload.write(hubitat.helper.HexUtils.hexStringToByteArray(encrypted_payload))
 		} else {
-			output.write(hubitat.helper.HexUtils.hexStringToByteArray(encrypted_payload))
+			contructed_payload.write(hubitat.helper.HexUtils.hexStringToByteArray(encrypted_payload))
 		}
+
 	} else if (tuyaVersion == "34") {
 		if (command != "status") {
-			new_payload = "3.4\0\0\0\0\0\0\0\0\0\0\0\0" + json_payload
-			json_payload = new_payload
+			json_payload = "3.4\0\0\0\0\0\0\0\0\0\0\0\0" + json_payload
 		}
 		encrypted_payload = encrypt(json_payload, localkey, false)
-		output.write(hubitat.helper.HexUtils.hexStringToByteArray(encrypted_payload))
-	}
-
-	if (tuyaVersion == "31") {
-		output.write(json_payload.getBytes())
+		contructed_payload.write(hubitat.helper.HexUtils.hexStringToByteArray(encrypted_payload))
 	}
 
 	if (logEnable) log.debug "payload after=" + json_payload
 
-	output.write(hubitat.helper.HexUtils.hexStringToByteArray(payload()[payloadFormat]["suffix"]))
+	byte[] final_payload = contructed_payload.toByteArray()
 
-	byte[] bff = output.toByteArray()
+	payload_len = contructed_payload.size() + hubitat.helper.HexUtils.hexStringToByteArray(payload()[payloadFormat]["suffix"]).size()
 
-	if (logEnable) log.debug hubitat.helper.HexUtils.byteArrayToHexString(bff)
-
-	postfix_payload = bff
-
-	postfix_payload_hex_len = postfix_payload.size()
-
-	if (tuyaVersion == "34") {
+	if (tuyaVersion == "31" || tuyaVersion == "33") {
+		payload_len = payload_len + 4 // for CRC32 storage
+	} else if (tuyaVersion == "34") {
 		// SHA252 is used as data integrity check not CRC32, i.e. need to add 256 bits = 32 bytes to the length
-		postfix_payload_hex_len = postfix_payload_hex_len + 32
+		payload_len = payload_len + 32 // for HMAC (SHA-256) storage
 	}
 
-	if (logEnable) log.debug postfix_payload_hex_len
+	if (logEnable) log.debug payload_len
 
-	if (logEnable) log.debug "Prefix: " + hubitat.helper.HexUtils.byteArrayToHexString(hubitat.helper.HexUtils.hexStringToByteArray(payload()[payloadFormat]["prefix"]))
-
+	// Start constructing the final message
 	output = new ByteArrayOutputStream()
-
 	output.write(hubitat.helper.HexUtils.hexStringToByteArray(payload()[payloadFormat]["prefix"]))
 	output.write(hubitat.helper.HexUtils.hexStringToByteArray(payload()[payloadFormat][command]["hexByte"]))
 	output.write(hubitat.helper.HexUtils.hexStringToByteArray("000000"))
-	output.write(postfix_payload_hex_len)
-	output.write(postfix_payload)
+	output.write(payload_len)
+	output.write(final_payload)
 
 	byte[] buf = output.toByteArray()
 
@@ -681,22 +671,16 @@ def generate_payload(command, data=null, timestamp=null, localkey=settings.local
 		SecretKeySpec key = new SecretKeySpec(secret.getBytes("UTF-8"), "HmacSHA256")
 
 		sha256_hmac.init(key)
-		sha256_hmac.update(buf, 0, buf.size()-4)
+		sha256_hmac.update(buf, 0, buf.size())
 		byte[] digest = sha256_hmac.doFinal()
 
 		if (logEnable) log.debug("message HMAC SHA256: " + hubitat.helper.HexUtils.byteArrayToHexString(digest))
 
-		output = new ByteArrayOutputStream()
-		output.write(buf, 0, buf.size()-4)
 		output.write(digest)
-		output.write(hubitat.helper.HexUtils.hexStringToByteArray(payload()[payloadFormat]["suffix"]))
-
-		buf = output.toByteArray()
-
 	} else {
 		if (logEnable) log.info "Using CRC32 as checksum"
 
-		crc32 = CRC32b(buf, buf.size()-8) & 0xffffffff
+		crc32 = CRC32b(buf, buf.size()) & 0xffffffff
 		if (logEnable) log.debug buf.size()
 
 		hex_crc = Long.toHexString(crc32)
@@ -707,16 +691,12 @@ def generate_payload(command, data=null, timestamp=null, localkey=settings.local
 		if (hex_crc.size() < 7) {
 			hex_crc = "00" + hex_crc
 		}
-
-		crc_bytes = hubitat.helper.HexUtils.hexStringToByteArray(hex_crc)
-
-		buf[buf.size()-8] = crc_bytes[0]
-		buf[buf.size()-7] = crc_bytes[1]
-		buf[buf.size()-6] = crc_bytes[2]
-		buf[buf.size()-5] = crc_bytes[3]
+		output.write(hubitat.helper.HexUtils.hexStringToByteArray(hex_crc))
 	}
 
-	return buf
+	output.write(hubitat.helper.HexUtils.hexStringToByteArray(payload()[payloadFormat]["suffix"]))
+
+	return output.toByteArray()
 }
 
 // Helper functions
@@ -733,7 +713,7 @@ def payload()
 				"command": ["devId":"", "uid": "", "t": ""]
 			],
 			"prefix": "000055aa00000000000000",
-			"suffix": "000000000000aa55"
+			"suffix": "0000aa55"
 		],
 		"v3.4": [
 			"status": [
