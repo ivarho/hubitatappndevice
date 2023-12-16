@@ -30,6 +30,8 @@ metadata {
 
 		command "status"
 
+		command "DriverSelfTest"
+
 		command "SendCustomDataToDevice", [[name:"endpoint*", type:"NUMBER", description:"To which endpint(dps) do you want the data to be sent"], [name:"data*", type:"STRING", description:"the data to be sent, treated as string, but true and false is converted"]]
 
 		attribute "rawMessage", "String"
@@ -56,6 +58,7 @@ def logsOff() {
 def updated() {
 	log.info "updated..."
 	log.warn "debug logging is: ${logEnable == true}"
+	state.clear()
 	if (logEnable) runIn(1800, logsOff)
 
 	state.payload = [:]
@@ -273,6 +276,59 @@ def sendSetMessage() {
 	state.payload = [:]
 }
 
+def DriverSelfTestReport(testName, generated, expected) {
+	boolean retValue = false
+
+	if (logEnable) log.debug "Generated " + hubitat.helper.HexUtils.byteArrayToHexString(generatedTestVector)
+	if (logEnable) log.debug "Expected " + expected
+
+	if (hubitat.helper.HexUtils.byteArrayToHexString(generatedTestVector) == expected) {
+		if (logEnable) log.info "$testName: Test passed"
+		sendEvent(name: "DriverSelfTest_$testName", value: "OK")
+		retValue = true
+	} else {
+		if (logEnable) log.error "$testName: Test failed! The generated message does not match the expected output"
+		sendEvent(name: "DriverSelfTest_$testName", value: "FAIL")
+	}
+
+	return retValue
+}
+
+def DriverSelfTest() {
+	if (logEnable) log.info "********** Starting driver self test *******************"
+
+	// Testing 3.1 set message
+	expected = "000055AA0000000000000007000000B3332E313365666533353337353164353333323070306A6A4A75744C704839416F324B566F76424E55492B4A78527649334E5833305039794D594A6E33703842704B456A737767354C332B7849343638314B5277434F484C366B374B3543375A362F58766D6A7665714446736F714E31792B31584A53707542766D5A4337567371644944336A386A393354387944526154664A45486150516E784C394844625948754A63634A636E33773D3D1A3578640000AA55"
+	generatedTestVector = generate_payload("set", ["20": true], true, localKey="7ae83ffe1980sa3c", devid="bfd733c97d1bfc88b3sysa", tuyaVersion="31")
+	DriverSelfTestReport("SetMessageV3_1", generatedTestVector, expected)
+
+	// Testing 3.1 status message
+	expected = "000055AA000000000000000A0000007A7B2267774964223A2262666437333363393764316266633838623373797361222C226465764964223A2262666437333363393764316266633838623373797361222C22756964223A2262666437333363393764316266633838623373797361222C2274223A2231373032363731383033227DCA1E0CC60000AA55"
+	generatedTestVector = generate_payload("status", data=null, true, localKey="7ae83ffe1980sa3c", devid="bfd733c97d1bfc88b3sysa", tuyaVersion="31")
+	DriverSelfTestReport("StatusMessageV3_1", generatedTestVector, expected)
+
+	// Testing 3.3 set message
+	expected = "000055AA000000000000000700000087332E33000000000000000000000000A748E326EB4BA47F40A36295A2F04D508F89C51BC8DCD5F7D0FF72318267DE9F01A4A123B308392F7FB1238EBCD4A47008E1CBEA4ECAE42ED9EBF5EF9A3BDEA8316CA2A375CBED57252A6E06F9990BB56CA9D203DE3F23F774FCC8345A4DF2441DA3D09F12FD1C36D81EE25C709727DF2E5CF2B30000AA55"
+	generatedTestVector = generate_payload("set", ["20": true], true, localKey="7ae83ffe1980sa3c", devid="bfd733c97d1bfc88b3sysa", tuyaVersion="33")
+	DriverSelfTestReport("SetMessageV3_3", generatedTestVector, expected)
+
+	// Testing 3.3 status message
+	expected = "000055AA000000000000000A00000088D0436FF6B453B07DC2CC8084484A8E3E08E1CBEA4ECAE42ED9EBF5EF9A3BDEA834A1D6E20760F13A0CF9DE1523730E598F89C51BC8DCD5F7D0FF72318267DE9F01A4A123B308392F7FB1238EBCD4A47008E1CBEA4ECAE42ED9EBF5EF9A3BDEA8316CA2A375CBED57252A6E06F9990BB543FF054E84050A495D427D28A8C0F29F0104C4D70000AA55"
+	generatedTestVector = generate_payload("status", data=null, true, localKey="7ae83ffe1980sa3c", devid="bfd733c97d1bfc88b3sysa", tuyaVersion="33")
+	DriverSelfTestReport("StatusMessageV3_3", generatedTestVector, expected)
+
+
+	// Testing 3.4 set message
+	expected = "000055AA000000000000000D000000749AC0971A69B046C19DDFEAB6800CBB66A8FC70BDD2FF855511A3A2CBF2955BFC806C9FBFFA10ED709EC2BA4D8EC24609E50317C707468F02A110E429BA321FAA3862640A83699215E1313BA653C6DA0E5F01AADD72E172D7705B0AF82BFCD5E54A92562659A18235AEF0DDB1453BB7070000AA55"
+	generatedTestVector = generate_payload("set", ["20": true], true, localKey="7ae83ffe1980sa3c", devid="bfd733c97d1bfc88b3sysa", tuyaVersion="34")
+	DriverSelfTestReport("SetMessageV3_4", generatedTestVector, expected)
+
+	// Testing 3.4 status message
+	expected = "000055AA000000000000001000000034A78158A05A786D32FEC14903A94445B47BEA54632DA130BAB31B719A8C21AB419104665404C82C85BDB55DCA068791F60000AA55"
+	generatedTestVector = generate_payload("status", data=null, true, localKey="7ae83ffe1980sa3c", devid="bfd733c97d1bfc88b3sysa", tuyaVersion="34")
+	DriverSelfTestReport("StatusMessageV3_4", generatedTestVector, expected)
+}
+
 def parse(String description) {
 	if (logEnable) log.debug "Receiving message from device"
 	if (logEnable) log.debug(description)
@@ -482,20 +538,20 @@ def send(byte[] message) {
 
 import javax.crypto.Mac
 
-def generate_payload(command, data=null) {
+def generate_payload(command, data=null, test=false, localkey=settings.localKey, devid=settings.devId, tuyaVersion=settings.tuyaProtVersion) {
 
 	String tuyaProtVersionStr = ""
 
 	def json = new groovy.json.JsonBuilder()
 
-	switch (tuyaProtVersion) {
+	switch (tuyaVersion) {
 		case "31":
 			tuyaProtVersionStr = "3.1"
-			payloadFormat = "device"
+			payloadFormat = "v3.1_v3.3"
 			break
 		case "33":
 			tuyaProtVersionStr = "3.3"
-			payloadFormat = "device"
+			payloadFormat = "v3.1_v3.3"
 			break
 		case "34":
 			tuyaProtVersionStr = "3.4"
@@ -507,18 +563,22 @@ def generate_payload(command, data=null) {
 	json_data = payload()[payloadFormat][command]["command"]
 
 	if (json_data.containsKey("gwId")) {
-		json_data["gwId"] = settings.devId
+		json_data["gwId"] = devid
 	}
 	if (json_data.containsKey("devId")) {
-		json_data["devId"] = settings.devId
+		json_data["devId"] = devid
 	}
 	if (json_data.containsKey("uid")) {
-		json_data["uid"] = settings.devId
+		json_data["uid"] = devid
 	}
 	if (json_data.containsKey("t")) {
 		Date now = new Date()
-		json_data["t"] = (now.getTime()/1000).toInteger().toString()
-		//json_data["t"] = "1702671803" // for testing
+
+		if (test == false) {
+			json_data["t"] = (now.getTime()/1000).toInteger().toString()
+		} else {
+			json_data["t"] = "1702671803" // for testing
+		}
 	}
 
 	if (data != null) {
@@ -531,7 +591,7 @@ def generate_payload(command, data=null) {
 
 	json json_data
 
-	if (logEnable) log.debug tuyaProtVersion
+	if (logEnable) log.debug tuyaVersion
 
 	json_payload = groovy.json.JsonOutput.toJson(json.toString())
 	json_payload = json_payload.replaceAll("\\\\", "")
@@ -542,12 +602,12 @@ def generate_payload(command, data=null) {
 
 	ByteArrayOutputStream output = new ByteArrayOutputStream()
 
-	if (command == "set" && tuyaProtVersion == "31") {
-		encrypted_payload = encrypt(json_payload, settings.localKey)
+	if (command == "set" && tuyaVersion == "31") {
+		encrypted_payload = encrypt(json_payload, localkey)
 
 		if (logEnable) log.debug "Encrypted payload: " + hubitat.helper.HexUtils.byteArrayToHexString(encrypted_payload.getBytes())
 
-		preMd5String = "data=" + encrypted_payload + "||lpv=" + tuyaProtVersionStr + "||" + settings.localKey
+		preMd5String = "data=" + encrypted_payload + "||lpv=" + tuyaProtVersionStr + "||" + localkey
 
 		if (logEnable) log.debug "preMd5String" + preMd5String
 
@@ -557,8 +617,8 @@ def generate_payload(command, data=null) {
 
 		json_payload = tuyaProtVersionStr + hexdig + encrypted_payload
 
-	} else if (tuyaProtVersion == "33") {
-		encrypted_payload = encrypt(json_payload, settings.localKey, false)
+	} else if (tuyaVersion == "33") {
+		encrypted_payload = encrypt(json_payload, localkey, false)
 
 		if (logEnable) log.debug encrypted_payload
 
@@ -569,16 +629,16 @@ def generate_payload(command, data=null) {
 		} else {
 			output.write(hubitat.helper.HexUtils.hexStringToByteArray(encrypted_payload))
 		}
-	} else if (tuyaProtVersion == "34") {
+	} else if (tuyaVersion == "34") {
 		if (command != "status") {
 			new_payload = "3.4\0\0\0\0\0\0\0\0\0\0\0\0" + json_payload
 			json_payload = new_payload
 		}
-		encrypted_payload = encrypt(json_payload, settings.localKey, false)
+		encrypted_payload = encrypt(json_payload, localkey, false)
 		output.write(hubitat.helper.HexUtils.hexStringToByteArray(encrypted_payload))
 	}
 
-	if (tuyaProtVersion == "31") {
+	if (tuyaVersion == "31") {
 		output.write(json_payload.getBytes())
 	}
 
@@ -594,7 +654,7 @@ def generate_payload(command, data=null) {
 
 	postfix_payload_hex_len = postfix_payload.size()
 
-	if (tuyaProtVersion == "34") {
+	if (tuyaVersion == "34") {
 		// SHA252 is used as data integrity check not CRC32, i.e. need to add 256 bits = 32 bytes to the length
 		postfix_payload_hex_len = postfix_payload_hex_len + 32
 	}
@@ -613,9 +673,11 @@ def generate_payload(command, data=null) {
 
 	byte[] buf = output.toByteArray()
 
-	if (tuyaProtVersion == "34") {
+	if (tuyaVersion == "34") {
+		if (logEnable) log.info "Using HMAC (SHA-256) as checksum"
+
 		Mac sha256_hmac = Mac.getInstance("HmacSHA256")
-		secret = settings.localKey.replaceAll('&lt;', '<')
+		secret = localkey.replaceAll('&lt;', '<')
 		SecretKeySpec key = new SecretKeySpec(secret.getBytes("UTF-8"), "HmacSHA256")
 
 		sha256_hmac.init(key)
@@ -624,14 +686,16 @@ def generate_payload(command, data=null) {
 
 		if (logEnable) log.debug("message HMAC SHA256: " + hubitat.helper.HexUtils.byteArrayToHexString(digest))
 
-		output2 = new ByteArrayOutputStream()
-		output2.write(buf, 0, buf.size()-4)
-		output2.write(digest)
-		output2.write(hubitat.helper.HexUtils.hexStringToByteArray(payload()[payloadFormat]["suffix"]))
+		output = new ByteArrayOutputStream()
+		output.write(buf, 0, buf.size()-4)
+		output.write(digest)
+		output.write(hubitat.helper.HexUtils.hexStringToByteArray(payload()[payloadFormat]["suffix"]))
 
-		buf = output2.toByteArray()
+		buf = output.toByteArray()
 
 	} else {
+		if (logEnable) log.info "Using CRC32 as checksum"
+
 		crc32 = CRC32b(buf, buf.size()-8) & 0xffffffff
 		if (logEnable) log.debug buf.size()
 
@@ -659,10 +723,10 @@ def generate_payload(command, data=null) {
 def payload()
 {
 	def payload_dict = [
-		"device": [
+		"v3.1_v3.3": [
 			"status": [
 				"hexByte": "0a",
-				"command": ["devId": "", "gwId": "", "uid":"", "t": ""]
+				"command": ["gwId":"", "devId":"", "uid":"", "t":""]
 			],
 			"set": [
 				"hexByte": "07",
