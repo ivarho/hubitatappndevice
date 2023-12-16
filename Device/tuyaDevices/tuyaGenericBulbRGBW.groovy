@@ -284,6 +284,10 @@ def sendSetMessage() {
 	state.payload = [:]
 }
 
+def status() {
+	send(generate_payload("status"))
+}
+
 def device_specific_parser(Object status_object) {
 
 	// Switch status (on / off)
@@ -343,130 +347,6 @@ def device_specific_parser(Object status_object) {
 		sendEvent(name: "saturation", value : colormap.saturation)
 		sendEvent(name: "level", value : colormap.value)
 	}
-}
-
-def parse(String description) {
-	if (logEnable) log.debug "Receiving message from device"
-	if (logEnable) log.debug(description)
-
-	byte[] msg_byte = hubitat.helper.HexUtils.hexStringToByteArray(description)
-
-	String status = new String(msg_byte, "UTF-8")
-
-	String protocol_version = ""
-
-	status = status[20..-1]
-
-	if (logEnable) log.debug "Raw incoming data: " + status
-
-	if (!status.startsWith("{")) {
-		// Encrypted message incoming, decrypt first
-
-		if (logEnable) log.debug "Encrypted message detected"
-		if (logEnable) log.debug "Bytes incoming: " + msg_byte.size()
-
-		def message_start = 0
-
-		// Find message type to determine start of message
-		def message_type = msg_byte[11].toInteger()
-
-		if (logEnable) log.debug ("Message type: ${message_type}")
-
-		if (message_type == 7) {
-			if (msg_byte.size() > 51) {
-				// Incoming control message
-				// Find protocol version
-				byte[] ver_bytes = [msg_byte[48], msg_byte[49], msg_byte[50]]
-				protocol_version = new String(ver_bytes)
-
-				if (protocol_version == "3.1") {
-					message_start = 67
-				} else if (protocol_version == "3.3" || protocol_version == "3.4") {
-					message_start = 63
-				}
-			} else {
-				// Assume protocol 3.3
-				protocol_version == "3.3"
-			}
-		} else if (message_type == 8 && msg_byte.size() > 23) {
-			// Incoming status message
-			// Find protocol version
-			byte[] ver_bytes = [msg_byte[20], msg_byte[21], msg_byte[22]]
-			protocol_version = new String(ver_bytes)
-
-			if (logEnable) log.debug("Protocol version: " + protocol_version)
-
-			if (protocol_version == "3.1") {
-				message_start = 67
-				log.error("Not supported! Please upgrade device firmware to 3.3")
-			} else if (protocol_version == "3.3" || protocol_version == "3.4") {
-				message_start = 35
-			} else {
-				log.error("Device firmware version not supported, protocol verison" + protocol_version)
-			}
-
-		} else if (message_type == 10) {
-			// Incoming status message
-			message_start = 20
-
-			// Status messages do not contain version information, however v 3.3
-			// protocol encrypts status messages, v 3.1 does not
-			protocol_version = "3.3"
-		}
-
-		// Find end of message by looking for 0xAA55
-		def end_of_message = 0
-		for (u = message_start; u < msg_byte.size()-1; u++) {
-			if (msg_byte[u] == (byte)0xAA && msg_byte[u+1] == (byte)0x55) {
-				//msg end found
-				if (logEnable) log.debug "End of message: ${u-message_start-6}"
-				end_of_message = u-message_start-6
-				break
-			}
-		}
-
-		// Re-assemble the bytes for decoding
-		ByteArrayOutputStream output = new ByteArrayOutputStream()
-		for (i = message_start; i < end_of_message+message_start; i++) {
-			output.write(msg_byte[i])
-		}
-
-		byte[] payload = output.toByteArray()
-
-		if (logEnable) log.debug "Assembled payload for decrypt: "+ hubitat.helper.HexUtils.byteArrayToHexString(payload)
-
-		def dec_status = ""
-
-		if (protocol_version == "3.1") {
-			dec_status = decrypt_bytes(payload, settings.localKey, true)
-		} else if (protocol_version == "3.3" || protocol_version == "3.4") {
-			dec_status = decrypt_bytes(payload, settings.localKey, false)
-		}
-
-		if (logEnable) log.debug "Decryted message: ${dec_status}"
-
-		status = dec_status
-	}
-
-	if (status != null && status != "") {
-		def jsonSlurper = new groovy.json.JsonSlurper()
-		def status_object = jsonSlurper.parseText(status)
-		device_specific_parser(status_object)
-		sendEvent(name: "rawMessage", value: status_object.dps)
-	} else {
-		// Message did not contain data, bulb received unknown command?
-		log.error "Device did not understand command"
-	}
-
-	try {
-		interfaces.rawSocket.close()
-	} catch (e) {
-		log.error "Could not close socket: $e"
-	}
-}
-
-def status() {
-	send(generate_payload("status"))
 }
 
 def hslToHsv(hue, saturation, level)
@@ -598,6 +478,126 @@ def DriverSelfTest() {
 	expected = "000055AA000000000000001000000034A78158A05A786D32FEC14903A94445B47BEA54632DA130BAB31B719A8C21AB419104665404C82C85BDB55DCA068791F60000AA55"
 	generatedTestVector = generate_payload("status", data=null, "1702671803", localKey="7ae83ffe1980sa3c", devid="bfd733c97d1bfc88b3sysa", tuyaVersion="34")
 	DriverSelfTestReport("StatusMessageV3_4", generatedTestVector, expected)
+}
+
+def parse(String description) {
+	if (logEnable) log.debug "Receiving message from device"
+	if (logEnable) log.debug(description)
+
+	byte[] msg_byte = hubitat.helper.HexUtils.hexStringToByteArray(description)
+
+	String status = new String(msg_byte, "UTF-8")
+
+	String protocol_version = ""
+
+	status = status[20..-1]
+
+	if (logEnable) log.debug "Raw incoming data: " + status
+
+	if (!status.startsWith("{")) {
+		// Encrypted message incoming, decrypt first
+
+		if (logEnable) log.debug "Encrypted message detected"
+		if (logEnable) log.debug "Bytes incoming: " + msg_byte.size()
+
+		def message_start = 0
+
+		// Find message type to determine start of message
+		def message_type = msg_byte[11].toInteger()
+
+		if (logEnable) log.debug ("Message type: ${message_type}")
+
+		if (message_type == 7) {
+			if (msg_byte.size() > 51) {
+				// Incoming control message
+				// Find protocol version
+				byte[] ver_bytes = [msg_byte[48], msg_byte[49], msg_byte[50]]
+				protocol_version = new String(ver_bytes)
+
+				if (protocol_version == "3.1") {
+					message_start = 67
+				} else if (protocol_version == "3.3" || protocol_version == "3.4") {
+					message_start = 63
+				}
+			} else {
+				// Assume protocol 3.3
+				protocol_version == "3.3"
+			}
+		} else if (message_type == 8 && msg_byte.size() > 23) {
+			// Incoming status message
+			// Find protocol version
+			byte[] ver_bytes = [msg_byte[20], msg_byte[21], msg_byte[22]]
+			protocol_version = new String(ver_bytes)
+
+			if (logEnable) log.debug("Protocol version: " + protocol_version)
+
+			if (protocol_version == "3.1") {
+				message_start = 67
+				log.error("Not supported! Please upgrade device firmware to 3.3")
+			} else if (protocol_version == "3.3" || protocol_version == "3.4") {
+				message_start = 35
+			} else {
+				log.error("Device firmware version not supported, protocol verison" + protocol_version)
+			}
+
+		} else if (message_type == 10) {
+			// Incoming status message
+			message_start = 20
+
+			// Status messages do not contain version information, however v 3.3
+			// protocol encrypts status messages, v 3.1 does not
+			protocol_version = "3.3"
+		}
+
+		// Find end of message by looking for 0xAA55
+		def end_of_message = 0
+		for (u = message_start; u < msg_byte.size()-1; u++) {
+			if (msg_byte[u] == (byte)0xAA && msg_byte[u+1] == (byte)0x55) {
+				//msg end found
+				if (logEnable) log.debug "End of message: ${u-message_start-6}"
+				end_of_message = u-message_start-6
+				break
+			}
+		}
+
+		// Re-assemble the bytes for decoding
+		ByteArrayOutputStream output = new ByteArrayOutputStream()
+		for (i = message_start; i < end_of_message+message_start; i++) {
+			output.write(msg_byte[i])
+		}
+
+		byte[] payload = output.toByteArray()
+
+		if (logEnable) log.debug "Assembled payload for decrypt: "+ hubitat.helper.HexUtils.byteArrayToHexString(payload)
+
+		def dec_status = ""
+
+		if (protocol_version == "3.1") {
+			dec_status = decrypt_bytes(payload, settings.localKey, true)
+		} else if (protocol_version == "3.3" || protocol_version == "3.4") {
+			dec_status = decrypt_bytes(payload, settings.localKey, false)
+		}
+
+		if (logEnable) log.debug "Decryted message: ${dec_status}"
+
+		status = dec_status
+	}
+
+	if (status != null && status != "") {
+		def jsonSlurper = new groovy.json.JsonSlurper()
+		def status_object = jsonSlurper.parseText(status)
+		device_specific_parser(status_object)
+		sendEvent(name: "rawMessage", value: status_object.dps)
+	} else {
+		// Message did not contain data, bulb received unknown command?
+		log.error "Device did not understand command"
+	}
+
+	try {
+		interfaces.rawSocket.close()
+	} catch (e) {
+		log.error "Could not close socket: $e"
+	}
 }
 
 import javax.crypto.Mac
