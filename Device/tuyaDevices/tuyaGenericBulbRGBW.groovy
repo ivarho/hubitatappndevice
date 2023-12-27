@@ -34,6 +34,7 @@ metadata {
 
 		attribute "rawMessage", "String"
 	}
+	ImportURL: "https://raw.githubusercontent.com/ivarho/hubitatappndevice/master/Device/tuyaDevices/tuyaGenericBulbRGBW.groovy"
 }
 
 preferences {
@@ -53,6 +54,10 @@ def logsOff() {
 	device.updateSetting("logEnable", [value: "false", type: "bool"])
 }
 
+def installed() {
+	updated()
+}
+
 def updated() {
 	log.info "updated..."
 	log.warn "debug logging is: ${logEnable == true}"
@@ -60,6 +65,8 @@ def updated() {
 	if (logEnable) runIn(1800, logsOff)
 
 	state.payload = [:]
+	atomicState.session_step = "step1"
+	state.realLocalKey = localKey.replaceAll('&lt;', '<').getBytes("UTF-8")
 
 	// Configure pull interval, only the parent pull for status
 	if (poll_interval.toInteger() != null) {
@@ -285,7 +292,7 @@ def sendSetMessage() {
 }
 
 def status() {
-	send(generate_payload("status"))
+	generate_payload("status")
 }
 
 def device_specific_parser(Object status_object) {
@@ -409,6 +416,40 @@ def socketStatus(socetStatusMsg) {
 	log.debug "Socket status message received:" + socetStatusMsg
 }
 
+def socket_connect() {
+
+	if (logEnable) log.debug "Connecting to socket: $settings.ipaddress at port: 6668"
+
+	try {
+		//port 6668
+		interfaces.rawSocket.connect(settings.ipaddress, 6668, byteInterface: true, readDelay: 500)
+	} catch (e) {
+		log.error "Error $e"
+	}
+}
+
+def socket_write(byte[] message) {
+	String msg = hubitat.helper.HexUtils.byteArrayToHexString(message)
+
+	if (logEnable) log.debug "Writing to socket " + settings.ipaddress + ":" + 6668 + " msg: " + msg
+
+	try {
+		interfaces.rawSocket.sendMessage(msg)
+	} catch (e) {
+		log.error "Error sending data to device: $e"
+	}
+}
+
+def socket_close() {
+	atomicState.session_step = "step1"
+
+	try {
+		interfaces.rawSocket.close()
+	} catch (e) {
+		log.error "Could not close socket: $e"
+	}
+}
+
 def send(byte[] message) {
 	String msg = hubitat.helper.HexUtils.byteArrayToHexString(message)
 
@@ -480,7 +521,7 @@ def DriverSelfTest() {
 	DriverSelfTestReport("StatusMessageV3_4", generatedTestVector, expected)
 }
 
-def parse(String description) {
+def parse(String description, byte[] secret_key=atomicState.sessionKey) {
 	if (logEnable) log.debug "Receiving message from device"
 	if (logEnable) log.debug(description)
 
@@ -491,6 +532,8 @@ def parse(String description) {
 	String protocol_version = ""
 
 	status = status[20..-1]
+
+	def cmd = 0
 
 	if (logEnable) log.debug "Raw incoming data: " + status
 
@@ -504,10 +547,18 @@ def parse(String description) {
 
 		// Find message type to determine start of message
 		def message_type = msg_byte[11].toInteger()
+		cmd = message_type
 
 		if (logEnable) log.debug ("Message type: ${message_type}")
 
-		if (message_type == 7) {
+		def reduce_end_by = 0
+
+		if (message_type == 4) {
+			// Incoming session key negotiation
+			message_start = 20
+			protocol_version = "3.4"
+			reduce_end_by = 28
+		} else if (message_type == 7) {
 			if (msg_byte.size() > 51) {
 				// Incoming control message
 				// Find protocol version
@@ -562,7 +613,7 @@ def parse(String description) {
 
 		// Re-assemble the bytes for decoding
 		ByteArrayOutputStream output = new ByteArrayOutputStream()
-		for (i = message_start; i < end_of_message+message_start; i++) {
+		for (i = message_start; i < end_of_message+message_start-reduce_end_by; i++) {
 			output.write(msg_byte[i])
 		}
 
@@ -583,27 +634,92 @@ def parse(String description) {
 		status = dec_status
 	}
 
-	if (status != null && status != "") {
+	if (logEnable) log.debug "Message type: $cmd"
+
+	if (cmd != 4 && (status != null && status != "")) {
 		def jsonSlurper = new groovy.json.JsonSlurper()
 		def status_object = jsonSlurper.parseText(status)
 		device_specific_parser(status_object)
 		sendEvent(name: "rawMessage", value: status_object.dps)
+
+		socket_close()
+
+	} else if (cmd == 4) {
+		// Generate last step
+		remote_nonce = status[0..15]
+		if (logEnable) log.debug "Remote nonce: $remote_nonce"
+
+		byte[] b_remote_nonce = remote_nonce.getBytes()
+
+		Mac sha256_hmac = Mac.getInstance("HmacSHA256")
+		SecretKeySpec key = new SecretKeySpec(localKey.replaceAll('&lt;', '<').getBytes("UTF-8"), "HmacSHA256")
+
+		sha256_hmac.init(key)
+		sha256_hmac.update(b_remote_nonce, 0, b_remote_nonce.size())
+		byte[] digest = sha256_hmac.doFinal()
+
+		log.debug "step3 payload: " + hubitat.helper.HexUtils.byteArrayToHexString(digest)
+
+		byte[] msg = pack_and_send_payload_v34(digest, 5, 2)
+
+		log.debug "message to send: " + hubitat.helper.HexUtils.byteArrayToHexString(msg)
+
+		atomicState.session_step = "step3"
+
+		socket_write(msg)
+
+		byte[] calKey = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+
+		// Do final session key calculation
+		int i = 0
+		for (byte b : '0123456789abcdef'.getBytes()) {
+			calKey[i] = b ^ b_remote_nonce[i]
+			i++
+		}
+
+		if (logEnable) log.debug "XOR'd keys: " + hubitat.helper.HexUtils.byteArrayToHexString(calKey)
+
+		sessKeyHEXString = encrypt(calKey, localKey.replaceAll('&lt;', '<').getBytes("UTF-8"), false)
+
+		log.debug sessKeyHEXString
+
+		byte[] sessKeyByteArray = hubitat.helper.HexUtils.hexStringToByteArray(sessKeyHEXString[0..31])
+
+		//String sessionKey = new String(sessKeyByteArray, "UTF-8")
+		atomicState.sessionKey = sessKeyByteArray
+
+		if (logEnable) log.debug "Session key: " + hubitat.helper.HexUtils.byteArrayToHexString(atomicState.sessionKey as byte[])
+		if (logEnable) log.debug "Session key (HEX): " + atomicState.sessionKey
+
+		atomicState.session_step = "final"
+
+		// Ready to send final message - hack!
+		//runInMillis(250, 'sendSetMessage')
+
+		if (logEnable) log.debug "Done negotiating session key, send actual message"
+
+		generate_payload(state.command, state.data, null, sessKeyByteArray)
+
+		//atomicState.session_step = "step1"
+
+		//runInMillis(500, get_session_timeout)
+
 	} else {
 		// Message did not contain data, bulb received unknown command?
 		log.error "Device did not understand command"
 	}
 
-	try {
+	/*try {
 		interfaces.rawSocket.close()
 	} catch (e) {
 		log.error "Could not close socket: $e"
-	}
+	}*/
 }
 
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec;
 
-def generate_payload(command, data=null, timestamp=null, localkey=settings.localKey, devid=settings.devId, tuyaVersion=settings.tuyaProtVersion) {
+def generate_payload(command, data=null, timestamp=null, byte[] localkey=state.realLocalKey, devid=settings.devId, tuyaVersion=settings.tuyaProtVersion) {
 
 	switch (tuyaVersion) {
 		case "31":
@@ -614,6 +730,27 @@ def generate_payload(command, data=null, timestamp=null, localkey=settings.local
 			payloadFormat = "v3.4"
 			break
 	}
+
+	if (get_session(tuyaVersion) == true) {
+		// Session ready, use session key
+		/*if (atomicState.sessionKey != "" && localkey == settings.localKey) {
+			// Use session key
+			localkey = atomicState.sessionKey
+
+			//RlJ8\x80r\xd6\xdcY\x17\xa94k\x106@
+		} else {
+			if (logEnable) log.error "No session key, or version does not need session key"
+		}*/
+
+	} else {
+		// Session not ready yet
+		state.data = data
+		state.command = command
+		return
+	}
+
+	if (logEnable) log.debug "Using key: " + new String(localkey as byte[], "UTF-8")
+	if (logEnable) log.debug "Using key: " + hubitat.helper.HexUtils.byteArrayToHexString(localkey as byte[])
 
 	json_data = payload()[payloadFormat][command]["command"]
 
@@ -661,7 +798,7 @@ def generate_payload(command, data=null, timestamp=null, localkey=settings.local
 			encrypted_payload = encrypt(json_payload, localkey)
 
 			if (logEnable) log.debug "Encrypted payload: " + hubitat.helper.HexUtils.byteArrayToHexString(encrypted_payload.getBytes())
-			preMd5String = "data=" + encrypted_payload + "||lpv=" + "3.1" + "||" + localkey
+			preMd5String = "data=" + encrypted_payload + "||lpv=" + "3.1" + "||" + new String(localkey, "UTF-8")
 			if (logEnable) log.debug "preMd5String" + preMd5String
 			hexdigest = generateMD5(preMd5String)
 			hexdig = new String(hexdigest[8..-9].getBytes("UTF-8"), "ISO-8859-1")
@@ -670,7 +807,7 @@ def generate_payload(command, data=null, timestamp=null, localkey=settings.local
 		contructed_payload.write(json_payload.getBytes())
 
 	} else if (tuyaVersion == "33") {
-		encrypted_payload = encrypt(json_payload, localkey, false)
+		encrypted_payload = encrypt(json_payload, localkey as byte[], false)
 
 		if (logEnable) log.debug encrypted_payload
 
@@ -685,7 +822,7 @@ def generate_payload(command, data=null, timestamp=null, localkey=settings.local
 		if (command != "status") {
 			json_payload = "3.4\0\0\0\0\0\0\0\0\0\0\0\0" + json_payload
 		}
-		encrypted_payload = encrypt(json_payload, localkey, false)
+		encrypted_payload = encrypt(json_payload, localkey as byte[], false)
 		contructed_payload.write(hubitat.helper.HexUtils.hexStringToByteArray(encrypted_payload))
 	}
 
@@ -704,9 +841,14 @@ def generate_payload(command, data=null, timestamp=null, localkey=settings.local
 
 	if (logEnable) log.debug payload_len
 
+	//log.info hubitat.helper.HexUtils.byteArrayToHexString(pack_and_send_payload_v34(json_payload, 1, 3))
+
 	// Start constructing the final message
 	output = new ByteArrayOutputStream()
-	output.write(hubitat.helper.HexUtils.hexStringToByteArray(payload()[payloadFormat]["prefix"]))
+	output.write(hubitat.helper.HexUtils.hexStringToByteArray(payload()[payloadFormat]["prefix_nr"]))
+	output.write(0)
+	output.write(3)
+	output.write(hubitat.helper.HexUtils.hexStringToByteArray("000000"))
 	output.write(hubitat.helper.HexUtils.hexStringToByteArray(payload()[payloadFormat][command]["hexByte"]))
 	output.write(hubitat.helper.HexUtils.hexStringToByteArray("000000"))
 	output.write(payload_len)
@@ -718,8 +860,7 @@ def generate_payload(command, data=null, timestamp=null, localkey=settings.local
 		if (logEnable) log.info "Using HMAC (SHA-256) as checksum"
 
 		Mac sha256_hmac = Mac.getInstance("HmacSHA256")
-		secret = localkey.replaceAll('&lt;', '<')
-		SecretKeySpec key = new SecretKeySpec(secret.getBytes("UTF-8"), "HmacSHA256")
+		SecretKeySpec key = new SecretKeySpec(localkey as byte[], "HmacSHA256")
 
 		sha256_hmac.init(key)
 		sha256_hmac.update(buf, 0, buf.size())
@@ -747,7 +888,136 @@ def generate_payload(command, data=null, timestamp=null, localkey=settings.local
 
 	output.write(hubitat.helper.HexUtils.hexStringToByteArray(payload()[payloadFormat]["suffix"]))
 
-	return output.toByteArray()
+	//return output.toByteArray()
+
+	socket_write(output.toByteArray())
+}
+
+def get_session(tuyaVersion) {
+
+	if (tuyaVersion.toInteger() <= 33) {
+		// Don't need to get session, just send message
+		return true
+	}
+
+	current_session_state = atomicState.session_step
+
+	if (current_session_state == null) {
+		current_session_state = "step1"
+	}
+
+	switch (current_session_state) {
+		case "step1":
+			socket_connect()
+			atomicState.session_step = "step2"
+			state.session_step = "step2"
+			socket_write(negotiate_session_key_step1())
+			runInMillis(500, 'get_session_timeout')
+			break
+		case "final":
+			// We have the session, lets send the data
+			return true
+	}
+
+	return false
+}
+
+def get_session_timeout() {
+	log.error "Timout in getting session at $atomicState.session_step"
+
+
+	if (atomicState.session_step == "step3") {
+		atomicState.session_step = "step1"
+	}
+}
+
+byte[] negotiate_session_key_step1() {
+	payloadFormat = "v3.4"
+
+	if (logEnable) log.debug("*** Starting session key negotiation ***")
+	local_nonce = '0123456789abcdef'
+	//remote_nonce = ''
+	//local_key = localkey.replaceAll('&lt;', '<')
+
+	cmd = 3
+	payload = local_nonce
+
+	encrypted_payload = encrypt(payload, localKey.replaceAll('&lt;', '<').getBytes("UTF-8"), false)
+
+	if (logEnable) log.debug("payload encrypted: " + encrypted_payload)
+
+	encrypted_payload = hubitat.helper.HexUtils.hexStringToByteArray(encrypted_payload)
+
+	def packed_message = new ByteArrayOutputStream()
+
+	packed_message.write(hubitat.helper.HexUtils.hexStringToByteArray(payload()[payloadFormat]["prefix"]))
+	packed_message.write(hubitat.helper.HexUtils.hexStringToByteArray(payload()[payloadFormat]["neg1"]["hexByte"]))
+	packed_message.write(hubitat.helper.HexUtils.hexStringToByteArray("000000"))
+	packed_message.write(encrypted_payload.size() + 32 + hubitat.helper.HexUtils.hexStringToByteArray(payload()[payloadFormat]["suffix"]).size())
+	packed_message.write(encrypted_payload)
+
+	if (logEnable) log.debug hubitat.helper.HexUtils.byteArrayToHexString(packed_message.toByteArray())
+
+	Mac sha256_hmac = Mac.getInstance("HmacSHA256")
+	secret = localKey.replaceAll('&lt;', '<')
+	SecretKeySpec key = new SecretKeySpec(secret.getBytes("UTF-8"), "HmacSHA256")
+
+	sha256_hmac.init(key)
+	sha256_hmac.update(packed_message.toByteArray(), 0, packed_message.size())
+	byte[] digest = sha256_hmac.doFinal()
+
+	packed_message.write(digest)
+	packed_message.write(hubitat.helper.HexUtils.hexStringToByteArray(payload()[payloadFormat]["suffix"]))
+
+	if (logEnable) log.debug hubitat.helper.HexUtils.byteArrayToHexString(packed_message.toByteArray())
+
+	packed_message.toByteArray()
+}
+
+def pack_and_send_payload_v34(byte[] data, Integer cmd, Integer msg_count=0) {
+	payloadFormat = "v3.4"
+
+	//if (logEnable) log.debug("*** Starting session key negotiation ***")
+	//local_nonce = '0123456789abcdef'
+	//remote_nonce = ''
+	//local_key = localkey.replaceAll('&lt;', '<')
+
+	//cmd = 3
+	//payload = local_nonce
+
+	encrypted_payload = encrypt(data, localKey.replaceAll('&lt;', '<').getBytes("UTF-8"), false)
+
+	if (logEnable) log.debug("payload encrypted: " + encrypted_payload)
+
+	encrypted_payload = hubitat.helper.HexUtils.hexStringToByteArray(encrypted_payload)
+
+	def packed_message = new ByteArrayOutputStream()
+
+	packed_message.write(hubitat.helper.HexUtils.hexStringToByteArray(payload()[payloadFormat]["prefix_nr"]))
+	packed_message.write(0)
+	packed_message.write(msg_count)
+	packed_message.write(hubitat.helper.HexUtils.hexStringToByteArray("000000"))
+	packed_message.write(cmd)
+	packed_message.write(hubitat.helper.HexUtils.hexStringToByteArray("000000"))
+	packed_message.write(encrypted_payload.size() + 32 + hubitat.helper.HexUtils.hexStringToByteArray(payload()[payloadFormat]["suffix"]).size())
+	packed_message.write(encrypted_payload)
+
+	if (logEnable) log.debug hubitat.helper.HexUtils.byteArrayToHexString(packed_message.toByteArray())
+
+	Mac sha256_hmac = Mac.getInstance("HmacSHA256")
+	secret = localKey.replaceAll('&lt;', '<')
+	SecretKeySpec key = new SecretKeySpec(secret.getBytes("UTF-8"), "HmacSHA256")
+
+	sha256_hmac.init(key)
+	sha256_hmac.update(packed_message.toByteArray(), 0, packed_message.size())
+	byte[] digest = sha256_hmac.doFinal()
+
+	packed_message.write(digest)
+	packed_message.write(hubitat.helper.HexUtils.hexStringToByteArray(payload()[payloadFormat]["suffix"]))
+
+	if (logEnable) log.debug hubitat.helper.HexUtils.byteArrayToHexString(packed_message.toByteArray())
+
+	packed_message.toByteArray()
 }
 
 // Helper functions
@@ -763,6 +1033,7 @@ def payload()
 				"hexByte": "07",
 				"command": ["devId":"", "uid": "", "t": ""]
 			],
+			"prefix_nr": "000055aa0000",
 			"prefix": "000055aa00000000000000",
 			"suffix": "0000aa55"
 		],
@@ -775,8 +1046,12 @@ def payload()
 				"hexByte": "0d",
 				"command": ["protocol":5,"t":"","data":""]
 			],
-			"prefix": "000055aa00000000000000",
-			"suffix": "0000aa55"
+			"neg1" : [
+				"hexByte": "03"
+			],
+			"prefix_nr": "000055aa0000",
+			"prefix"   : "000055aa00000000000000",
+			"suffix"   : "0000aa55"
 		]
 	]
 
@@ -790,14 +1065,10 @@ import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.Cipher
 
 // Encrypt plain text v. 3.1 uses base64 encoding, while 3.3 does not
-def encrypt (def plainText, def secret, encodeB64=true) {
-
-	// Fix key to remove any escaped characters
-	secret = secret.replaceAll('&lt;', '<')
-
+def encrypt (def plainText, byte[] secret, encodeB64=true) {
 	// Encryption is AES in ECB mode, pad using PKCS5Padding as needed
 	def cipher = Cipher.getInstance("AES/ECB/PKCS5Padding ")
-	SecretKeySpec key = new SecretKeySpec(secret.getBytes("UTF-8"), "AES")
+	SecretKeySpec key = new SecretKeySpec(secret, "AES")
 
 	// Give the encryption engine the encryption key
 	cipher.init(Cipher.ENCRYPT_MODE, key)
@@ -807,7 +1078,11 @@ def encrypt (def plainText, def secret, encodeB64=true) {
 	if (encodeB64) {
 		result = cipher.doFinal(plainText.getBytes("UTF-8")).encodeBase64().toString()
 	} else {
-		result = cipher.doFinal(plainText.getBytes("UTF-8")).encodeHex().toString()
+		if (plainText instanceof String) {
+			result = cipher.doFinal(plainText.getBytes("UTF-8")).encodeHex().toString()
+		} else {
+			result = cipher.doFinal(plainText).encodeHex().toString()
+		}
 	}
 
 	return result
