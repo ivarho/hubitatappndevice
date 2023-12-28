@@ -16,7 +16,10 @@
  * limitations under the License.
  */
 metadata {
-	definition(name: "tuya Generic RGBW Bulb", namespace: "iholand", author: "iholand") {
+	definition(name: "tuya Generic RGBW Bulb",
+			namespace: "iholand",
+			author: "iholand",
+			importUrl: "https://raw.githubusercontent.com/ivarho/hubitatappndevice/master/Device/tuyaDevices/tuyaGenericBulbRGBW.groovy") {
 		capability "Actuator"
 		capability "Bulb"
 		capability "ColorTemperature"
@@ -34,7 +37,6 @@ metadata {
 
 		attribute "rawMessage", "String"
 	}
-	ImportURL: "https://raw.githubusercontent.com/ivarho/hubitatappndevice/master/Device/tuyaDevices/tuyaGenericBulbRGBW.groovy"
 }
 
 preferences {
@@ -65,7 +67,8 @@ def updated() {
 	if (logEnable) runIn(1800, logsOff)
 
 	state.payload = [:]
-	atomicState.session_step = "step1"
+	state.haveSession = false
+	state.session_step = "step1"
 	state.realLocalKey = localKey.replaceAll('&lt;', '<').getBytes("UTF-8")
 
 	// Configure pull interval, only the parent pull for status
@@ -282,17 +285,17 @@ def SendCustomDataToDevice(endpoint, data) {
 		data = false
 	}
 
-	send(generate_payload("set", ["${endpoint}":data]))
+	send("set", ["${endpoint}":data])
 }
 
 def sendSetMessage() {
 
-	send(generate_payload("set", state.payload))
+	send("set", state.payload)
 	state.payload = [:]
 }
 
 def status() {
-	generate_payload("status")
+	send("status", [:])
 }
 
 def device_specific_parser(Object status_object) {
@@ -412,17 +415,25 @@ def hsvToHsl(hue, saturation, value)
 import hubitat.device.HubAction
 import hubitat.device.Protocol
 
-def socketStatus(socetStatusMsg) {
-	log.debug "Socket status message received:" + socetStatusMsg
+def socketStatus(String socketMessage) {
+	log.warn "Socket status message received: " + socketMessage
+
+	if (socketMessage == "send error: Broken pipe (Write failed)") {
+		socket_close()
+	}
+
+	if (socketMessage.contains('disconnect')) {
+		socket_close()
+	}
 }
 
 def socket_connect() {
 
-	if (logEnable) log.debug "Connecting to socket: $settings.ipaddress at port: 6668"
+	if (logEnable) log.debug "Socket connect: $settings.ipaddress at port: 6668"
 
 	try {
 		//port 6668
-		interfaces.rawSocket.connect(settings.ipaddress, 6668, byteInterface: true, readDelay: 500)
+		interfaces.rawSocket.connect(settings.ipaddress, 6668, byteInterface: true, readDelay: 150)
 	} catch (e) {
 		log.error "Error $e"
 	}
@@ -431,7 +442,7 @@ def socket_connect() {
 def socket_write(byte[] message) {
 	String msg = hubitat.helper.HexUtils.byteArrayToHexString(message)
 
-	if (logEnable) log.debug "Writing to socket " + settings.ipaddress + ":" + 6668 + " msg: " + msg
+	if (logEnable) log.debug "Socket: write - " + settings.ipaddress + ":" + 6668 + " msg: " + msg
 
 	try {
 		interfaces.rawSocket.sendMessage(msg)
@@ -441,7 +452,11 @@ def socket_write(byte[] message) {
 }
 
 def socket_close() {
-	atomicState.session_step = "step1"
+	if(logEnable) log.debug "Socket: close"
+
+	state.session_step = "step1"
+	state.haveSession = false
+	state.sessionKey = null
 
 	try {
 		interfaces.rawSocket.close()
@@ -450,18 +465,29 @@ def socket_close() {
 	}
 }
 
-def send(byte[] message) {
-	String msg = hubitat.helper.HexUtils.byteArrayToHexString(message)
+def send(String command, Map payload=null) {
 
-	if (logEnable) log.debug "Sending message to " + settings.ipaddress + ":" + 6668 + " msg: " + msg
+	boolean sessionState = state.haveSession
 
-	try {
-		//port 6668
-		interfaces.rawSocket.connect(settings.ipaddress, 6668, byteInterface: true, readDelay: 500)
-		interfaces.rawSocket.sendMessage(msg)
-	} catch (e) {
-		log.error "Error $e"
+	if (sessionState == false) {
+		if(logEnable) log.debug "No session, creating new session"
+		sessionState = get_session(settings.tuyaProtVersion)
 	}
+
+	if (sessionState) {
+		socket_write(generate_payload(command, payload))
+	} else {
+		state.command = command
+		state.payload = payload
+	}
+
+	state.haveSession = sessionState
+
+	runIn(30, socketStatus, [data: "disconnect: pipe closed"])
+}
+
+def sendAll() {
+	send(state.command, state.data)
 }
 
 def DriverSelfTestReport(testName, generated, expected) {
@@ -491,37 +517,37 @@ def DriverSelfTest() {
 
 	// Testing 3.1 set message
 	expected = "000055AA0000000000000007000000B3332E313365666533353337353164353333323070306A6A4A75744C704839416F324B566F76424E55492B4A78527649334E5833305039794D594A6E33703842704B456A737767354C332B7849343638314B5277434F484C366B374B3543375A362F58766D6A7665714446736F714E31792B31584A53707542766D5A4337567371644944336A386A393354387944526154664A45486150516E784C394844625948754A63634A636E33773D3D1A3578640000AA55"
-	generatedTestVector = generate_payload("set", ["20": true], "1702671803", localKey="7ae83ffe1980sa3c", devid="bfd733c97d1bfc88b3sysa", tuyaVersion="31")
+	generatedTestVector = generate_payload("set", ["20": true], "1702671803", localKey="7ae83ffe1980sa3c".getBytes("UTF-8"), devid="bfd733c97d1bfc88b3sysa", tuyaVersion="31")
 	DriverSelfTestReport("SetMessageV3_1", generatedTestVector, expected)
 
 	// Testing 3.1 status message
 	expected = "000055AA000000000000000A0000007A7B2267774964223A2262666437333363393764316266633838623373797361222C226465764964223A2262666437333363393764316266633838623373797361222C22756964223A2262666437333363393764316266633838623373797361222C2274223A2231373032363731383033227DCA1E0CC60000AA55"
-	generatedTestVector = generate_payload("status", data=null, "1702671803", localKey="7ae83ffe1980sa3c", devid="bfd733c97d1bfc88b3sysa", tuyaVersion="31")
+	generatedTestVector = generate_payload("status", data=null, "1702671803", localKey="7ae83ffe1980sa3c".getBytes("UTF-8"), devid="bfd733c97d1bfc88b3sysa", tuyaVersion="31")
 	DriverSelfTestReport("StatusMessageV3_1", generatedTestVector, expected)
 
 	// Testing 3.3 set message
 	expected = "000055AA000000000000000700000087332E33000000000000000000000000A748E326EB4BA47F40A36295A2F04D508F89C51BC8DCD5F7D0FF72318267DE9F01A4A123B308392F7FB1238EBCD4A47008E1CBEA4ECAE42ED9EBF5EF9A3BDEA8316CA2A375CBED57252A6E06F9990BB56CA9D203DE3F23F774FCC8345A4DF2441DA3D09F12FD1C36D81EE25C709727DF2E5CF2B30000AA55"
-	generatedTestVector = generate_payload("set", ["20": true], "1702671803", localKey="7ae83ffe1980sa3c", devid="bfd733c97d1bfc88b3sysa", tuyaVersion="33")
+	generatedTestVector = generate_payload("set", ["20": true], "1702671803", localKey="7ae83ffe1980sa3c".getBytes("UTF-8"), devid="bfd733c97d1bfc88b3sysa", tuyaVersion="33")
 	DriverSelfTestReport("SetMessageV3_3", generatedTestVector, expected)
 
 	// Testing 3.3 status message
 	expected = "000055AA000000000000000A00000088D0436FF6B453B07DC2CC8084484A8E3E08E1CBEA4ECAE42ED9EBF5EF9A3BDEA834A1D6E20760F13A0CF9DE1523730E598F89C51BC8DCD5F7D0FF72318267DE9F01A4A123B308392F7FB1238EBCD4A47008E1CBEA4ECAE42ED9EBF5EF9A3BDEA8316CA2A375CBED57252A6E06F9990BB543FF054E84050A495D427D28A8C0F29F0104C4D70000AA55"
-	generatedTestVector = generate_payload("status", data=null, "1702671803", localKey="7ae83ffe1980sa3c", devid="bfd733c97d1bfc88b3sysa", tuyaVersion="33")
+	generatedTestVector = generate_payload("status", data=null, "1702671803", localKey="7ae83ffe1980sa3c".getBytes("UTF-8"), devid="bfd733c97d1bfc88b3sysa", tuyaVersion="33")
 	DriverSelfTestReport("StatusMessageV3_3", generatedTestVector, expected)
 
 
 	// Testing 3.4 set message
 	expected = "000055AA000000000000000D000000749AC0971A69B046C19DDFEAB6800CBB66A8FC70BDD2FF855511A3A2CBF2955BFC806C9FBFFA10ED709EC2BA4D8EC24609E50317C707468F02A110E429BA321FAA3862640A83699215E1313BA653C6DA0E5F01AADD72E172D7705B0AF82BFCD5E54A92562659A18235AEF0DDB1453BB7070000AA55"
-	generatedTestVector = generate_payload("set", ["20": true], "1702671803", localKey="7ae83ffe1980sa3c", devid="bfd733c97d1bfc88b3sysa", tuyaVersion="34")
+	generatedTestVector = generate_payload("set", ["20": true], "1702671803", localKey="7ae83ffe1980sa3c".getBytes("UTF-8"), devid="bfd733c97d1bfc88b3sysa", tuyaVersion="34")
 	DriverSelfTestReport("SetMessageV3_4", generatedTestVector, expected)
 
 	// Testing 3.4 status message
 	expected = "000055AA000000000000001000000034A78158A05A786D32FEC14903A94445B47BEA54632DA130BAB31B719A8C21AB419104665404C82C85BDB55DCA068791F60000AA55"
-	generatedTestVector = generate_payload("status", data=null, "1702671803", localKey="7ae83ffe1980sa3c", devid="bfd733c97d1bfc88b3sysa", tuyaVersion="34")
+	generatedTestVector = generate_payload("status", data=null, "1702671803", localKey="7ae83ffe1980sa3c".getBytes("UTF-8"), devid="bfd733c97d1bfc88b3sysa", tuyaVersion="34")
 	DriverSelfTestReport("StatusMessageV3_4", generatedTestVector, expected)
 }
 
-def parse(String description, byte[] secret_key=atomicState.sessionKey) {
+def parse(String description, byte[] decryptKey=state.realLocalKey) {
 	if (logEnable) log.debug "Receiving message from device"
 	if (logEnable) log.debug(description)
 
@@ -642,7 +668,7 @@ def parse(String description, byte[] secret_key=atomicState.sessionKey) {
 		device_specific_parser(status_object)
 		sendEvent(name: "rawMessage", value: status_object.dps)
 
-		socket_close()
+		//socket_close()
 
 	} else if (cmd == 4) {
 		// Generate last step
@@ -652,7 +678,7 @@ def parse(String description, byte[] secret_key=atomicState.sessionKey) {
 		byte[] b_remote_nonce = remote_nonce.getBytes()
 
 		Mac sha256_hmac = Mac.getInstance("HmacSHA256")
-		SecretKeySpec key = new SecretKeySpec(localKey.replaceAll('&lt;', '<').getBytes("UTF-8"), "HmacSHA256")
+		SecretKeySpec key = new SecretKeySpec(decryptKey as byte[], "HmacSHA256")
 
 		sha256_hmac.init(key)
 		sha256_hmac.update(b_remote_nonce, 0, b_remote_nonce.size())
@@ -664,7 +690,7 @@ def parse(String description, byte[] secret_key=atomicState.sessionKey) {
 
 		log.debug "message to send: " + hubitat.helper.HexUtils.byteArrayToHexString(msg)
 
-		atomicState.session_step = "step3"
+		state.session_step = "step3"
 
 		socket_write(msg)
 
@@ -686,34 +712,25 @@ def parse(String description, byte[] secret_key=atomicState.sessionKey) {
 		byte[] sessKeyByteArray = hubitat.helper.HexUtils.hexStringToByteArray(sessKeyHEXString[0..31])
 
 		//String sessionKey = new String(sessKeyByteArray, "UTF-8")
-		atomicState.sessionKey = sessKeyByteArray
+		state.sessionKey = sessKeyByteArray
 
-		if (logEnable) log.debug "Session key: " + hubitat.helper.HexUtils.byteArrayToHexString(atomicState.sessionKey as byte[])
-		if (logEnable) log.debug "Session key (HEX): " + atomicState.sessionKey
+		if (logEnable) log.debug "Session key: " + hubitat.helper.HexUtils.byteArrayToHexString(state.sessionKey as byte[])
+		if (logEnable) log.debug "Session key (HEX): " + state.sessionKey
 
-		atomicState.session_step = "final"
-
-		// Ready to send final message - hack!
-		//runInMillis(250, 'sendSetMessage')
+		state.session_step = "final"
 
 		if (logEnable) log.debug "Done negotiating session key, send actual message"
 
-		generate_payload(state.command, state.data, null, sessKeyByteArray)
+		state.haveSession = true
 
-		//atomicState.session_step = "step1"
+		// Time to send actual message
+		runInMillis(100, sendAll)
 
-		//runInMillis(500, get_session_timeout)
-
+		return sessKeyHEXString
 	} else {
 		// Message did not contain data, bulb received unknown command?
 		log.error "Device did not understand command"
 	}
-
-	/*try {
-		interfaces.rawSocket.close()
-	} catch (e) {
-		log.error "Could not close socket: $e"
-	}*/
 }
 
 import javax.crypto.Mac
@@ -731,22 +748,8 @@ def generate_payload(command, data=null, timestamp=null, byte[] localkey=state.r
 			break
 	}
 
-	if (get_session(tuyaVersion) == true) {
-		// Session ready, use session key
-		/*if (atomicState.sessionKey != "" && localkey == settings.localKey) {
-			// Use session key
-			localkey = atomicState.sessionKey
-
-			//RlJ8\x80r\xd6\xdcY\x17\xa94k\x106@
-		} else {
-			if (logEnable) log.error "No session key, or version does not need session key"
-		}*/
-
-	} else {
-		// Session not ready yet
-		state.data = data
-		state.command = command
-		return
+	if (state.sessionKey != null) {
+		localkey = state.sessionKey
 	}
 
 	if (logEnable) log.debug "Using key: " + new String(localkey as byte[], "UTF-8")
@@ -773,7 +776,7 @@ def generate_payload(command, data=null, timestamp=null, byte[] localkey=state.r
 		}
 	}
 
-	if (data != null) {
+	if (data != null && data != [:]) {
 		if (json_data.containsKey("data")) {
 			json_data["data"] = ["dps" : data]
 		} else {
@@ -847,7 +850,7 @@ def generate_payload(command, data=null, timestamp=null, byte[] localkey=state.r
 	output = new ByteArrayOutputStream()
 	output.write(hubitat.helper.HexUtils.hexStringToByteArray(payload()[payloadFormat]["prefix_nr"]))
 	output.write(0)
-	output.write(3)
+	output.write(0)
 	output.write(hubitat.helper.HexUtils.hexStringToByteArray("000000"))
 	output.write(hubitat.helper.HexUtils.hexStringToByteArray(payload()[payloadFormat][command]["hexByte"]))
 	output.write(hubitat.helper.HexUtils.hexStringToByteArray("000000"))
@@ -888,19 +891,18 @@ def generate_payload(command, data=null, timestamp=null, byte[] localkey=state.r
 
 	output.write(hubitat.helper.HexUtils.hexStringToByteArray(payload()[payloadFormat]["suffix"]))
 
-	//return output.toByteArray()
-
-	socket_write(output.toByteArray())
+	return output.toByteArray()
 }
 
 def get_session(tuyaVersion) {
 
 	if (tuyaVersion.toInteger() <= 33) {
 		// Don't need to get session, just send message
+		socket_connect()
 		return true
 	}
 
-	current_session_state = atomicState.session_step
+	current_session_state = state.session_step
 
 	if (current_session_state == null) {
 		current_session_state = "step1"
@@ -909,7 +911,7 @@ def get_session(tuyaVersion) {
 	switch (current_session_state) {
 		case "step1":
 			socket_connect()
-			atomicState.session_step = "step2"
+			state.session_step = "step2"
 			state.session_step = "step2"
 			socket_write(negotiate_session_key_step1())
 			runInMillis(500, 'get_session_timeout')
@@ -923,11 +925,14 @@ def get_session(tuyaVersion) {
 }
 
 def get_session_timeout() {
-	log.error "Timout in getting session at $atomicState.session_step"
+	log.error "Timout in getting session at $state.session_step"
 
+	if (state.session_step == "step2") {
+		state.session_step = "step1"
+	}
 
-	if (atomicState.session_step == "step3") {
-		atomicState.session_step = "step1"
+	if (state.session_step == "step3") {
+		state.session_step = "step1"
 	}
 }
 
@@ -976,14 +981,6 @@ byte[] negotiate_session_key_step1() {
 
 def pack_and_send_payload_v34(byte[] data, Integer cmd, Integer msg_count=0) {
 	payloadFormat = "v3.4"
-
-	//if (logEnable) log.debug("*** Starting session key negotiation ***")
-	//local_nonce = '0123456789abcdef'
-	//remote_nonce = ''
-	//local_key = localkey.replaceAll('&lt;', '<')
-
-	//cmd = 3
-	//payload = local_nonce
 
 	encrypted_payload = encrypt(data, localKey.replaceAll('&lt;', '<').getBytes("UTF-8"), false)
 
