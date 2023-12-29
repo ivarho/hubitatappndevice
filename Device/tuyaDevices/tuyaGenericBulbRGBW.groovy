@@ -584,6 +584,7 @@ def parse(String description, byte[] decryptKey=state.realLocalKey) {
 			message_start = 20
 			protocol_version = "3.4"
 			reduce_end_by = 28
+			unschedule(get_session_timeout)
 		} else if (message_type == 7) {
 			if (msg_byte.size() > 51) {
 				// Incoming control message
