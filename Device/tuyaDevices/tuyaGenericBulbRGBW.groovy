@@ -605,16 +605,24 @@ def parse(String description, byte[] decryptKey=state.realLocalKey) {
 		} else if (message_type == 8 && msg_byte.size() > 23) {
 			// Incoming status message
 			// Find protocol version
-			byte[] ver_bytes = [msg_byte[20], msg_byte[21], msg_byte[22]]
-			protocol_version = new String(ver_bytes)
+			if (settings.tuyaProtVersion != "34") {
+				byte[] ver_bytes = [msg_byte[20], msg_byte[21], msg_byte[22]]
+				protocol_version = new String(ver_bytes)
+			} else if (settings.tuyaProtVersion == "34") {
+				// Protocol 3.4 does not include the protocol in clear text anymore, hence need to use driver settings
+				protocol_version = "3.4"
+			}
 
 			if (logEnable) log.debug("Protocol version: " + protocol_version)
 
 			if (protocol_version == "3.1") {
 				message_start = 67
 				log.error("Not supported! Please upgrade device firmware to 3.3")
-			} else if (protocol_version == "3.3" || protocol_version == "3.4") {
+			} else if (protocol_version == "3.3") {
 				message_start = 35
+			} else if (protocol_version == "3.4") {
+				message_start = 20
+				reduce_end_by = 28
 			} else {
 				log.error("Device firmware version not supported, protocol verison" + protocol_version)
 			}
@@ -626,6 +634,17 @@ def parse(String description, byte[] decryptKey=state.realLocalKey) {
 			// Status messages do not contain version information, however v 3.3
 			// protocol encrypts status messages, v 3.1 does not
 			protocol_version = "3.3"
+		} else if (message_type == 16) {
+			// Incoming status message, new type in 3.4
+			message_start = 20
+			reduce_end_by = 28
+			protocol_version = "3.4"
+		} else if (message_type == 13 && msg_byte.size() > 56) {
+			// Incoming encrypted frame, new type in 3.4
+			// Incoming command result, new type in 3.4
+			message_start = 76
+			reduce_end_by = 28
+			protocol_version = "3.4"
 		}
 
 		// Find end of message by looking for 0xAA55
@@ -653,11 +672,17 @@ def parse(String description, byte[] decryptKey=state.realLocalKey) {
 
 		if (protocol_version == "3.1") {
 			dec_status = decrypt_bytes(payload, settings.localKey, true)
-		} else if (protocol_version == "3.3" || protocol_version == "3.4") {
+		} else if (protocol_version == "3.3") {
+			if (logEnable) "Using local key for decrypt: $settings.localKey"
+			dec_status = decrypt_bytes(payload, settings.localKey, false)
+		} else if (protocol_version == "3.4") {
 			if (state.sessionKey != null) {
+				if (logEnable) "Using session key for decrypt: $state.sessionKey"
 				dec_status = decrypt_bytes(payload, state.sessionKey, false)
 			} else {
+				if (logEnable) "Using local key for decrypt: $settings.localKey"
 				dec_status = decrypt_bytes(payload, settings.localKey, false)
+
 			}
 		}
 
@@ -670,7 +695,17 @@ def parse(String description, byte[] decryptKey=state.realLocalKey) {
 
 	if (cmd != 4 && (status != null && status != "")) {
 		def jsonSlurper = new groovy.json.JsonSlurper()
-		def status_object = jsonSlurper.parseText(status)
+		def status_object = [:]
+
+		if (settings.tuyaProtVersion == "34" && (cmd == 13 || cmd == 8)) {
+			status = status.substring(15)
+			log.info "This is the status: $status"
+			status_object = jsonSlurper.parseText(status)
+			status_object = status_object.data
+		} else {
+			status_object = jsonSlurper.parseText(status)
+		}
+
 		device_specific_parser(status_object)
 		sendEvent(name: "rawMessage", value: status_object.dps)
 
