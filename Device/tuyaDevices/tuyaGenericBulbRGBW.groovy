@@ -70,6 +70,7 @@ def updated() {
 	state.haveSession = false
 	state.session_step = "step1"
 	state.realLocalKey = localKey.replaceAll('&lt;', '<').getBytes("UTF-8")
+	state.msgseq = 1
 
 	// Configure pull interval, only the parent pull for status
 	if (poll_interval.toInteger() != null) {
@@ -465,7 +466,7 @@ def socket_close() {
 	}
 }
 
-def send(String command, Map payload=null) {
+def send(String command, Map message=null) {
 
 	boolean sessionState = state.haveSession
 
@@ -475,10 +476,10 @@ def send(String command, Map payload=null) {
 	}
 
 	if (sessionState) {
-		socket_write(generate_payload(command, payload))
+		socket_write(generate_payload(command, message))
 	} else {
 		state.command = command
-		state.payload = payload
+		state.message = message
 	}
 
 	state.haveSession = sessionState
@@ -487,7 +488,7 @@ def send(String command, Map payload=null) {
 }
 
 def sendAll() {
-	send(state.command, state.data)
+	send(state.command, state.message)
 }
 
 def DriverSelfTestReport(testName, generated, expected) {
@@ -653,7 +654,11 @@ def parse(String description, byte[] decryptKey=state.realLocalKey) {
 		if (protocol_version == "3.1") {
 			dec_status = decrypt_bytes(payload, settings.localKey, true)
 		} else if (protocol_version == "3.3" || protocol_version == "3.4") {
-			dec_status = decrypt_bytes(payload, settings.localKey, false)
+			if (state.sessionKey != null) {
+				dec_status = decrypt_bytes(payload, state.sessionKey, false)
+			} else {
+				dec_status = decrypt_bytes(payload, settings.localKey, false)
+			}
 		}
 
 		if (logEnable) log.debug "Decryted message: ${dec_status}"
@@ -850,8 +855,9 @@ def generate_payload(command, data=null, timestamp=null, byte[] localkey=state.r
 	// Start constructing the final message
 	output = new ByteArrayOutputStream()
 	output.write(hubitat.helper.HexUtils.hexStringToByteArray(payload()[payloadFormat]["prefix_nr"]))
-	output.write(0)
-	output.write(0)
+	output.write(state.msgseq >> 8)
+	output.write(state.msgseq)
+	state.msgseq = state.msgseq + 1
 	output.write(hubitat.helper.HexUtils.hexStringToByteArray("000000"))
 	output.write(hubitat.helper.HexUtils.hexStringToByteArray(payload()[payloadFormat][command]["hexByte"]))
 	output.write(hubitat.helper.HexUtils.hexStringToByteArray("000000"))
@@ -915,7 +921,7 @@ def get_session(tuyaVersion) {
 			state.session_step = "step2"
 			state.session_step = "step2"
 			socket_write(negotiate_session_key_step1())
-			runInMillis(500, 'get_session_timeout')
+			runInMillis(750, get_session_timeout)
 			break
 		case "final":
 			// We have the session, lets send the data
@@ -926,7 +932,7 @@ def get_session(tuyaVersion) {
 }
 
 def get_session_timeout() {
-	log.error "Timout in getting session at $state.session_step"
+	log.error "Timout in getting session at $state.session_step, no answer from device"
 
 	if (state.session_step == "step2") {
 		state.session_step = "step1"
@@ -956,7 +962,11 @@ byte[] negotiate_session_key_step1() {
 
 	def packed_message = new ByteArrayOutputStream()
 
-	packed_message.write(hubitat.helper.HexUtils.hexStringToByteArray(payload()[payloadFormat]["prefix"]))
+	packed_message.write(hubitat.helper.HexUtils.hexStringToByteArray(payload()[payloadFormat]["prefix_nr"]))
+	packed_message.write(state.msgseq >> 8)
+	packed_message.write(state.msgseq)
+	state.msgseq = state.msgseq + 1
+	packed_message.write(hubitat.helper.HexUtils.hexStringToByteArray("000000"))
 	packed_message.write(hubitat.helper.HexUtils.hexStringToByteArray(payload()[payloadFormat]["neg1"]["hexByte"]))
 	packed_message.write(hubitat.helper.HexUtils.hexStringToByteArray("000000"))
 	packed_message.write(encrypted_payload.size() + 32 + hubitat.helper.HexUtils.hexStringToByteArray(payload()[payloadFormat]["suffix"]).size())
@@ -992,8 +1002,9 @@ def pack_and_send_payload_v34(byte[] data, Integer cmd, Integer msg_count=0) {
 	def packed_message = new ByteArrayOutputStream()
 
 	packed_message.write(hubitat.helper.HexUtils.hexStringToByteArray(payload()[payloadFormat]["prefix_nr"]))
-	packed_message.write(0)
-	packed_message.write(msg_count)
+	packed_message.write(state.msgseq >> 8)
+	packed_message.write(state.msgseq)
+	state.msgseq = state.msgseq + 1
 	packed_message.write(hubitat.helper.HexUtils.hexStringToByteArray("000000"))
 	packed_message.write(cmd)
 	packed_message.write(hubitat.helper.HexUtils.hexStringToByteArray("000000"))
@@ -1090,11 +1101,18 @@ def encrypt (def plainText, byte[] secret, encodeB64=true) {
 def decrypt_bytes (byte[] cypherBytes, def secret, decodeB64=false) {
 	if (logEnable) log.debug "*********** Decrypting **************"
 
-	// Fix key to remove any escaped characters
-	secret = secret.replaceAll('&lt;', '<')
 
 	def cipher = Cipher.getInstance("AES/ECB/PKCS5Padding ")
-	SecretKeySpec key = new SecretKeySpec(secret.getBytes(), "AES")
+
+	SecretKeySpec key
+
+	if (secret instanceof String) {
+		// Fix key to remove any escaped characters
+		secret = secret.replaceAll('&lt;', '<')
+		key = new SecretKeySpec(secret.getBytes(), "AES")
+	} else {
+		key = new SecretKeySpec(secret as byte[], "AES")
+	}
 
 	cipher.init(Cipher.DECRYPT_MODE, key)
 
