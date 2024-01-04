@@ -127,7 +127,7 @@ def setColorTemperature(colortemperature, level=null, transitionTime=null) {
 
 	//send(generate_payload("set", setMap))
 
-	state.payload += setMap
+	statePayload += setMap
 
 	runInMillis(250, 'sendSetMessage')
 }
@@ -164,7 +164,7 @@ def setColor(colormap) {
 
 	//send(generate_payload("set", setMap))
 
-	state.payload += setMap
+	statePayload += setMap
 	runInMillis(250, 'sendSetMessage')
 
 }
@@ -189,7 +189,7 @@ def presetLevel(level) {
 		setMap[22] = level*10
 
 		//send(generate_payload("set", setMap))
-		state.payload += setMap
+		statePayload += setMap
 		runInMillis(250, 'sendSetMessage')
 	} else {
 		off()
@@ -219,7 +219,7 @@ def setEffect(effectnumber) {
 
 	setMap[25] = lightEffects[effectnumber.intValue()]
 
-	state.payload += setMap
+	statePayload += setMap
 	runInMillis(250, 'sendSetMessage')
 }
 
@@ -262,14 +262,14 @@ def refresh() {
 def on() {
 	//send(generate_payload("set", [20:true]))
 
-	state.payload[20] = true
-	runInMillis(500, 'sendSetMessage')
+	statePayload[20] = true
+	runInMillis(250, 'sendSetMessage')
 }
 
 def off() {
 	//send(generate_payload("set", [20:false]))
-	state.payload[20] = false
-	runInMillis(500, 'sendSetMessage')
+	statePayload[20] = false
+	runInMillis(250, 'sendSetMessage')
 }
 
 def SendCustomDataToDevice(endpoint, data) {
@@ -287,8 +287,8 @@ def SendCustomDataToDevice(endpoint, data) {
 
 def sendSetMessage() {
 
-	send("set", state.payload)
-	state.payload = [:]
+	send("set", statePayload)
+	statePayload = [:]
 }
 
 def status() {
@@ -411,7 +411,25 @@ def hsvToHsl(hue, saturation, value)
 
 import hubitat.device.HubAction
 import hubitat.device.Protocol
+import groovy.transform.Field
 
+@Field static Map statePayload = [:] // For the driver to use to queue up messages
+
+// Session
+@Field static String staticSession_step // = state.session_step
+@Field static byte[] staticSessionKey // = state.sessionKey
+@Field static String staticLocalNonce // = state.localNonce
+
+// Keys
+@Field static byte[] staticRealLocalkey // = state.realLocalKey
+
+// Program flow
+@Field static Integer staticRetry // = state.retry
+@Field static boolean staticHaveSession // = state.haveSession
+@Field static Short staticMsgseq // = state.msgseq
+
+// Callback function used by HE to notify about socket changes
+// This has been reported to be buggy
 def socketStatus(String socketMessage) {
 	log.warn "Socket status message received: " + socketMessage
 
@@ -462,6 +480,9 @@ def socket_close() {
 	}
 }
 
+@Field static String fCommand = ""
+@Field static Map fMessage = [:]
+
 def send(String command, Map message=null) {
 
 	boolean sessionState = state.haveSession
@@ -473,33 +494,42 @@ def send(String command, Map message=null) {
 
 	if (sessionState) {
 		socket_write(generate_payload(command, message))
-	} else {
-		state.command = command
-		state.message = message
 	}
+
+	fCommand = command
+	fMessage = message
+
 	state.haveSession = sessionState
 
-	runInMillis(2000, sendTimeout)
-	runIn(60, socketStatus, [data: "disconnect: pipe closed (driver forced)"])
+	runInMillis(1000, sendTimeout)
+	runIn(30, socketStatus, [data: "disconnect: pipe closed (driver forced)"])
 }
 
 def sendAll() {
-	send(state.command, state.message)
-	state.command = null
-	state.message = null
+	if (fCommand != "") {
+		send(fCommand, fMessage)
+	}
 }
 
 def sendTimeout() {
-	log.error "No response from device, check device IP and correct local key!"
-	//socket_close()
+	if (state.retry > 0) {
+		if (logEnable) log.warn "No response from device, retrying..."
+		state.retry = state.retry - 1
+		sendAll()
+	} else {
+		log.error "No answer from device after 5 retries"
+		socket_close()
+	}
 }
 
 def tuyaDeviceUpdate() {
-	state.payload = [:]
+	statePayload = [:]
 	state.haveSession = false
 	state.session_step = "step1"
 	state.realLocalKey = localKey.replaceAll('&lt;', '<').getBytes("UTF-8")
+	staticRealLocalKey = localKey.replaceAll('&lt;', '<').getBytes("UTF-8")
 	state.msgseq = 1
+	state.retry = 5
 }
 
 def DriverSelfTestReport(testName, byte[] generated, String expected) {
@@ -545,9 +575,11 @@ def DriverSelfTestReport(testName, generated, expected) {
 def DriverSelfTest() {
 	log.info "********** Starting driver self test *******************"
 
+	log.info "This is the value of staticRealLocalKey: $staticRealLocalKey :" + hubitat.helper.HexUtils.byteArrayToHexString(staticRealLocalKey)
+
 	state.clear()
 	// Need to make sure to have this variable
-	state.payload = [:]
+	statePayload = [:]
 
 	// Testing 3.1 set message
 	expected = "000055AA0000000000000007000000B3332E313365666533353337353164353333323070306A6A4A75744C704839416F324B566F76424E55492B4A78527649334E5833305039794D594A6E33703842704B456A737767354C332B7849343638314B5277434F484C366B374B3543375A362F58766D6A7665714446736F714E31792B31584A53707542766D5A4337567371644944336A386A393354387944526154664A45486150516E784C394844625948754A63634A636E33773D3D1A3578640000AA55"
@@ -602,8 +634,6 @@ def DriverSelfTestCallback(def status) {
 	log.error "I was called with the following $status"
 }
 
-import groovy.transform.Field
-
 @Field static Map frameTypes = [
 	3:  "KEY_START",
 	4:  "KEY_RESP",
@@ -628,6 +658,8 @@ def new_parse(String message) {
 	if(logEnable) log.debug "Using new parser on message: " + message
 
 	unschedule(sendTimeout)
+
+	state.retry = 5
 
 	String start = "000055AA"
 
@@ -748,7 +780,6 @@ def decodeIncomingFrame(byte[] incomingData, Integer sofIndex=0, byte[] testKey=
 			byte[] responseOnKeyResponse
 			byte[] remoteNonce
 			(responseOnKeyResponse, remoteNonce) = decodeIncomingKeyResponse(plainTextMessage)
-			pauseExecution(250)
 			socket_write(responseOnKeyResponse)
 
 			state.sessionKey = calculateSessionKey(remoteNonce)
@@ -756,7 +787,7 @@ def decodeIncomingFrame(byte[] incomingData, Integer sofIndex=0, byte[] testKey=
 			state.haveSession = true
 
 			// Time to send actual message
-			runInMillis(750, sendAll)
+			runInMillis(100, sendAll)
 
 			// No further actions needed on key response
 			return
@@ -774,13 +805,13 @@ def decodeIncomingFrame(byte[] incomingData, Integer sofIndex=0, byte[] testKey=
 	if(logEnable) log.debug "JSON object: $status"
 	if(logEnable) log.debug "DPS object: " + status
 
-	device_specific_parser(status)
-
 	if (callback != null) {
 		callback(status)
+	} else {
+		device_specific_parser(status)
+		sendEvent(name: "rawMessage", value: status.dps)
 	}
 
-	sendEvent(name: "rawMessage", value: status.dps)
 }
 
 def decryptPayload(byte[] data, byte[] key, start, length) {
@@ -851,7 +882,7 @@ def parse(String description, byte[] decryptKey=state.realLocalKey) {
 	return
 
 	unschedule(sendTimeout)
-	state.retries = 5
+	state.retry = 5
 
 	byte[] msg_byte = hubitat.helper.HexUtils.hexStringToByteArray(description)
 
@@ -1312,7 +1343,7 @@ byte[] generateKeyStartMessage() {
 
 	payload = local_nonce
 
-	log.debug "Payload: $local_nonce"
+	if (logEnable) log.debug "Payload: $local_nonce"
 
 	encrypted_payload = encrypt(payload, state.realLocalKey as byte[], false)
 
