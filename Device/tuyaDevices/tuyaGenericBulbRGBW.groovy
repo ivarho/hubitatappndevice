@@ -446,9 +446,6 @@ import groovy.transform.Field
 @Field static byte[] staticSessionKey // = state.sessionKey
 @Field static String staticLocalNonce // = state.localNonce
 
-// Keys
-@Field static byte[] staticRealLocalkey // = state.realLocalKey
-
 // Program flow
 @Field static Integer staticRetry // = state.retry
 @Field static boolean staticHaveSession // = state.haveSession
@@ -548,13 +545,17 @@ def sendTimeout() {
 	}
 }
 
+Short getNewMessageSequence() {
+	if (staticMsgseq == null) staticMsgseq = 0
+	staticMsgseq = staticMsgseq + 1
+	return staticMsgseq
+}
+
 def tuyaDeviceUpdate() {
 	statePayload = [:]
 	staticHaveSession = false
 	state.session_step = "step1"
 	state.realLocalKey = localKey.replaceAll('&lt;', '<').getBytes("UTF-8")
-	staticRealLocalKey = localKey.replaceAll('&lt;', '<').getBytes("UTF-8")
-	staticMsgseq = 1
 	state.retry = 5
 }
 
@@ -601,8 +602,6 @@ def DriverSelfTestReport(testName, generated, expected) {
 def DriverSelfTest() {
 	log.info "********** Starting driver self test *******************"
 
-	log.info "This is the value of staticRealLocalKey: $staticRealLocalKey :" + hubitat.helper.HexUtils.byteArrayToHexString(staticRealLocalKey)
-
 	state.clear()
 	// Need to make sure to have this variable
 	statePayload = [:]
@@ -637,6 +636,12 @@ def DriverSelfTest() {
 	expected = "000055AA000000000000001000000034A78158A05A786D32FEC14903A94445B47BEA54632DA130BAB31B719A8C21AB419104665404C82C85BDB55DCA068791F60000AA55"
 	generatedTestVector = generate_payload("status", data=null, "1702671803", localkey="7ae83ffe1980sa3c".getBytes("UTF-8"), devid="bfd733c97d1bfc88b3sysa", tuyaVersion="34", 0 as Short)
 	DriverSelfTestReport("StatusMessageV3_4", generatedTestVector, expected)
+
+	// Testing Generating Session key request (1st)
+
+	// Testing Reception of Session key request answer (2nd)
+
+	// Testing Generating Session key final answer (3rd)
 
 	// Testing Generating Sesson key
 	expected = "34A80557C18868E1D090E3B210FBC253"
@@ -1135,7 +1140,7 @@ def parse(String description, byte[] decryptKey=state.realLocalKey) {
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec;
 
-def generate_payload(String command, def data=null, String timestamp=null, byte[] localkey=state.realLocalKey, String devid=settings.devId, String tuyaVersion=settings.tuyaProtVersion, Short sequenceNr=null) {
+def generate_payload(String command, def data=null, String timestamp=null, byte[] localkey=state.realLocalKey, String devid=settings.devId, String tuyaVersion=settings.tuyaProtVersion, Short useMsgSequence=null) {
 
 	switch (tuyaVersion) {
 		case "31":
@@ -1245,20 +1250,13 @@ def generate_payload(String command, def data=null, String timestamp=null, byte[
 
 	//log.info hubitat.helper.HexUtils.byteArrayToHexString(generateGeneralMessageV3_4(json_payload, 1, 3))
 
-	sequence = 1
-	if (sequenceNr == null) {
-		sequence = staticMsgseq
-		sequence = sequence + 1
-		staticMsgseq = sequence
-	} else {
-		sequence = sequenceNr
-	}
+	Short msgSequence = useMsgSequence==null ? getNewMessageSequence() : useMsgSequence
 
 	// Start constructing the final message
 	output = new ByteArrayOutputStream()
 	output.write(hubitat.helper.HexUtils.hexStringToByteArray(payload()[payloadFormat]["prefix_nr"]))
-	output.write((sequence >> 8) & 0xff)
-	output.write(sequence & 0xff)
+	output.write(msgSequence >> 8)
+	output.write(msgSequence)
 	output.write(hubitat.helper.HexUtils.hexStringToByteArray("000000"))
 	output.write(hubitat.helper.HexUtils.hexStringToByteArray(payload()[payloadFormat][command]["hexByte"]))
 	output.write(hubitat.helper.HexUtils.hexStringToByteArray("000000"))
@@ -1379,10 +1377,11 @@ byte[] generateKeyStartMessage() {
 
 	def packed_message = new ByteArrayOutputStream()
 
+	Short msgSequence = useMsgSequence==null ? getNewMessageSequence() : useMsgSequence
+
 	packed_message.write(hubitat.helper.HexUtils.hexStringToByteArray(payload()[payloadFormat]["prefix_nr"]))
-	packed_message.write(staticMsgseq >> 8)
-	packed_message.write(staticMsgseq)
-	staticMsgseq = staticMsgseq + 1
+	packed_message.write(msgSequence >> 8)
+	packed_message.write(msgSequence)
 	packed_message.write(hubitat.helper.HexUtils.hexStringToByteArray("000000"))
 	packed_message.write(getFrameTypeId("KEY_START"))
 	packed_message.write(hubitat.helper.HexUtils.hexStringToByteArray("000000"))
@@ -1417,10 +1416,11 @@ def generateGeneralMessageV3_4(byte[] data, Integer cmd, Integer msg_count=0, by
 
 	def packed_message = new ByteArrayOutputStream()
 
+	Short msgSequence = useMsgSequence==null ? getNewMessageSequence() : useMsgSequence
+
 	packed_message.write(hubitat.helper.HexUtils.hexStringToByteArray(payload()[payloadFormat]["prefix_nr"]))
-	packed_message.write(staticMsgseq >> 8)
-	packed_message.write(staticMsgseq)
-	staticMsgseq = staticMsgseq + 1
+	packed_message.write(msgSequence >> 8)
+	packed_message.write(msgSequence)
 	packed_message.write(hubitat.helper.HexUtils.hexStringToByteArray("000000"))
 	packed_message.write(cmd)
 	packed_message.write(hubitat.helper.HexUtils.hexStringToByteArray("000000"))
