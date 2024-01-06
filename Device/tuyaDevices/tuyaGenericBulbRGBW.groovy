@@ -67,7 +67,7 @@ def updated() {
 	state.clear()
 	if (logEnable) runIn(1800, logsOff)
 
-	tuyaDeviceUpdate()
+	_updatedTuya()
 
 	// Configure pull interval, only the parent pull for status
 	if (poll_interval.toInteger() != null) {
@@ -321,64 +321,68 @@ def status() {
 	send("status", [:])
 }
 
-def device_specific_parser(Object status_object) {
+def parse(String message) {
 
-	// Switch status (on / off)
-	if (status_object.dps.containsKey("20")) {
-		if (status_object.dps["20"] == true) {
-			sendEvent(name: "switch", value : "on")
-		} else {
-			sendEvent(name: "switch", value : "off")
+	List results = _parseTuya(message)
+
+	results.each {status_object ->
+		// Switch status (on / off)
+		if (status_object.dps.containsKey("20")) {
+			if (status_object.dps["20"] == true) {
+				sendEvent(name: "switch", value : "on")
+			} else {
+				sendEvent(name: "switch", value : "off")
+			}
 		}
-	}
 
-	// Bulb Mode
-	if (status_object.dps.containsKey("21")) {
-		if (status_object.dps["21"] == "white") {
-			sendEvent(name: "colorMode", value : "CT")
-		} else if (status_object.dps["21"] == "colour") {
-			sendEvent(name: "colorMode", value : "RGB")
-		} else {
-			sendEvent(name: "colorMode", value : "EFFECTS")
+		// Bulb Mode
+		if (status_object.dps.containsKey("21")) {
+			if (status_object.dps["21"] == "white") {
+				sendEvent(name: "colorMode", value : "CT")
+			} else if (status_object.dps["21"] == "colour") {
+				sendEvent(name: "colorMode", value : "RGB")
+			} else {
+				sendEvent(name: "colorMode", value : "EFFECTS")
+			}
 		}
-	}
 
-	// Brightness
-	if (status_object.dps.containsKey("22")) {
-		sendEvent(name: "presetLevel", value : status_object.dps["22"]/10)
-		sendEvent(name: "level", value : status_object.dps["22"]/10)
-	}
+		// Brightness
+		if (status_object.dps.containsKey("22")) {
+			sendEvent(name: "presetLevel", value : status_object.dps["22"]/10)
+			sendEvent(name: "level", value : status_object.dps["22"]/10)
+		}
 
-	// Color temperature
-	if (status_object.dps.containsKey("23")) {
+		// Color temperature
+		if (status_object.dps.containsKey("23")) {
 
-		Integer colortemperature = (status_object.dps["23"] + (2700/3.8))*3.8
+			Integer colortemperature = (status_object.dps["23"] + (2700/3.8))*3.8
 
-		sendEvent(name: "colorTemperature", value : colortemperature)
-	}
+			sendEvent(name: "colorTemperature", value : colortemperature)
+		}
 
-	// Color information
-	if (status_object.dps.containsKey("24")) {
-		// Hue
-		def hueStr = status_object.dps["24"].substring(0,4)
-		Float hue_fl = Integer.parseInt(hueStr, 16)/3.6
-		Integer hue = hue_fl.round(0)
+		// Color information
+		if (status_object.dps.containsKey("24")) {
+			// Hue
+			def hueStr = status_object.dps["24"].substring(0,4)
+			Float hue_fl = Integer.parseInt(hueStr, 16)/3.6
+			Integer hue = hue_fl.round(0)
 
-		// Saturation
-		def satStr = status_object.dps["24"].substring(5,8)
-		def sat = Integer.parseInt(satStr, 16)/10
+			// Saturation
+			def satStr = status_object.dps["24"].substring(5,8)
+			def sat = Integer.parseInt(satStr, 16)/10
 
-		// Level
-		def levelStr = status_object.dps["24"].substring(9,12)
-		def level = Integer.parseInt(levelStr, 16)/10
+			// Level
+			def levelStr = status_object.dps["24"].substring(9,12)
+			def level = Integer.parseInt(levelStr, 16)/10
 
-		// Bug in Hubitat: Hubitat stores colors as HSV, however documents claim HSL. The tuya
-		// Ledvance bulb I have store color information in HSL, hence need to convert.
-		def colormap = hslToHsv(hue, sat, level)
+			// Bug in Hubitat: Hubitat stores colors as HSV, however documents claim HSL. The tuya
+			// Ledvance bulb I have store color information in HSL, hence need to convert.
+			def colormap = hslToHsv(hue, sat, level)
 
-		sendEvent(name: "hue", value : colormap.hue)
-		sendEvent(name: "saturation", value : colormap.saturation)
-		sendEvent(name: "level", value : colormap.value)
+			sendEvent(name: "hue", value : colormap.hue)
+			sendEvent(name: "saturation", value : colormap.saturation)
+			sendEvent(name: "level", value : colormap.value)
+		}
 	}
 }
 
@@ -562,7 +566,7 @@ Short getNewMessageSequence() {
 	return staticMsgseq
 }
 
-def tuyaDeviceUpdate() {
+def _updatedTuya() {
 	statePayload = [:]
 	staticHaveSession = false
 	state.session_step = "step1"
@@ -704,7 +708,7 @@ def getFrameTypeId(String name) {
 	"34": 32
 ]
 
-def parse(String message) {
+List _parseTuya(String message) {
 	if(logEnable) log.debug "Using new parser on message: " + message
 
 	unschedule(sendTimeout)
@@ -743,13 +747,19 @@ def parse(String message) {
 
 	byte[] incomingData = hubitat.helper.HexUtils.hexStringToByteArray(message)
 
+	List results = []
+
 	startIndexes.each {
-		decodeIncomingFrame(incomingData as byte[], it as Integer)
+		Map result = decodeIncomingFrame(incomingData as byte[], it as Integer)
+		if (result != null) {
+			results.add(result)
+		}
 	}
 
+	return results
 }
 
-def decodeIncomingFrame(byte[] incomingData, Integer sofIndex=0, byte[] testKey=null, Closure callback=null) {
+Map decodeIncomingFrame(byte[] incomingData, Integer sofIndex=0, byte[] testKey=null, Closure callback=null) {
 	long frameSequence = Byte.toUnsignedLong(incomingData[sofIndex + 7]) + (Byte.toUnsignedLong(incomingData[sofIndex + 8]) << 8)
 	def frameType = Byte.toUnsignedInt(incomingData[sofIndex + 11])
 	Integer frameLength = Byte.toUnsignedInt(incomingData[sofIndex + 15])
@@ -873,11 +883,12 @@ def decodeIncomingFrame(byte[] incomingData, Integer sofIndex=0, byte[] testKey=
 
 	if (callback != null) {
 		callback(status)
-	} else {
-		device_specific_parser(status)
-		sendEvent(name: "rawMessage", value: status.dps)
 	}
 
+	// For debugging
+	sendEvent(name: "rawMessage", value: status.dps)
+
+	return status
 }
 
 def decryptPayload(byte[] data, byte[] key, start, length) {
