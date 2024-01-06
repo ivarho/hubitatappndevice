@@ -638,6 +638,9 @@ def DriverSelfTest() {
 	DriverSelfTestReport("StatusMessageV3_4", generatedTestVector, expected)
 
 	// Testing Generating Session key request (1st)
+	expected = "000055AA000000010000000300000044A3F090DD2637D2A406A883DDB748A528103D2D5B1508ABFA4BCDE07FC047EAFA47BF7E33438811CCB8FAA4D1FC848EB6AE0C6AA329B493CFAA44A42792AF6D230000AA55"
+	generatedTestVector = hubitat.helper.HexUtils.byteArrayToHexString(generateKeyStartMessage('0123456789abcdef', "7ae83ffe1980sa3c".getBytes("UTF-8"), 1 as Short))
+	DriverSelfTestReport("GenerateSessionKeyReqStep1", generatedTestVector, expected)
 
 	// Testing Reception of Session key request answer (2nd)
 
@@ -901,7 +904,7 @@ def calculateSessionKey(byte[] remoteNonce, String useLocalNonce=null, byte[] ke
 
 	if(logEnable) log.debug "Session key: " + hubitat.helper.HexUtils.byteArrayToHexString(sessKeyByteArray)
 
-	if(logEnable) log.debug "Done negotiating session key"
+	if(logEnable) log.debug "********************** DONE  SESSION KEY NEGOTIATION **********************"
 
 	return sessKeyByteArray
 }
@@ -1360,16 +1363,16 @@ String getLocalNonce() {
 	return staticLocalNonce
 }
 
-byte[] generateKeyStartMessage(Short useMsgSequence=null, String useLocalNonce=null) {
+byte[] generateKeyStartMessage(String useLocalNonce=null, byte[] useKey=state.realLocalKey, Short useMsgSequence=null) {
 	payloadFormat = "v3.4"
 
-	if (logEnable) log.debug("*** Starting session key negotiation ***")
+	if (logEnable) log.debug("********************** START SESSION KEY NEGOTIATION **********************")
 
 	payload = useLocalNonce==null? getLocalNonce() : useLocalNonce
 
 	if (logEnable) log.debug "Payload (local nonce): $payload"
 
-	encrypted_payload = encrypt(payload, state.realLocalKey as byte[], false)
+	encrypted_payload = encrypt(payload, useKey, false)
 
 	if (logEnable) log.debug("Payload (local nonce) encrypted: " + encrypted_payload)
 
@@ -1391,7 +1394,7 @@ byte[] generateKeyStartMessage(Short useMsgSequence=null, String useLocalNonce=n
 	if (logEnable) log.debug hubitat.helper.HexUtils.byteArrayToHexString(packed_message.toByteArray())
 
 	Mac sha256_hmac = Mac.getInstance("HmacSHA256")
-	SecretKeySpec key = new SecretKeySpec(state.realLocalKey as byte[], "HmacSHA256")
+	SecretKeySpec key = new SecretKeySpec(useKey, "HmacSHA256")
 
 	sha256_hmac.init(key)
 	sha256_hmac.update(packed_message.toByteArray(), 0, packed_message.size())
