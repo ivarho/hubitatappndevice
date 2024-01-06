@@ -19,7 +19,8 @@ metadata {
 	definition(name: "tuya Generic RGBW Bulb",
 			namespace: "iholand",
 			author: "iholand",
-			importUrl: "https://raw.githubusercontent.com/ivarho/hubitatappndevice/master/Device/tuyaDevices/tuyaGenericBulbRGBW.groovy") {
+			importUrl: "https://raw.githubusercontent.com/ivarho/hubitatappndevice/master/Device/tuyaDevices/tuyaGenericBulbRGBW.groovy",
+			singleThreaded: true) {
 		capability "Actuator"
 		capability "Bulb"
 		capability "ColorTemperature"
@@ -470,7 +471,7 @@ def socket_close() {
 	if(logEnable) log.debug "Socket: close"
 
 	state.session_step = "step1"
-	state.haveSession = false
+	staticHaveSession = false
 	state.sessionKey = null
 
 	try {
@@ -485,7 +486,7 @@ def socket_close() {
 
 def send(String command, Map message=null) {
 
-	boolean sessionState = state.haveSession
+	boolean sessionState = staticHaveSession
 
 	if (sessionState == false) {
 		if(logEnable) log.debug "No session, creating new session"
@@ -499,7 +500,7 @@ def send(String command, Map message=null) {
 	fCommand = command
 	fMessage = message
 
-	state.haveSession = sessionState
+	staticHaveSession = sessionState
 
 	runInMillis(1000, sendTimeout)
 	runIn(30, socketStatus, [data: "disconnect: pipe closed (driver forced)"])
@@ -524,11 +525,11 @@ def sendTimeout() {
 
 def tuyaDeviceUpdate() {
 	statePayload = [:]
-	state.haveSession = false
+	staticHaveSession = false
 	state.session_step = "step1"
 	state.realLocalKey = localKey.replaceAll('&lt;', '<').getBytes("UTF-8")
 	staticRealLocalKey = localKey.replaceAll('&lt;', '<').getBytes("UTF-8")
-	state.msgseq = 1
+	staticMsgseq = 1
 	state.retry = 5
 }
 
@@ -784,7 +785,7 @@ def decodeIncomingFrame(byte[] incomingData, Integer sofIndex=0, byte[] testKey=
 
 			state.sessionKey = calculateSessionKey(remoteNonce)
 			state.session_step = "final"
-			state.haveSession = true
+			staticHaveSession = true
 
 			// Time to send actual message
 			runInMillis(100, sendAll)
@@ -1094,7 +1095,7 @@ def parse(String description, byte[] decryptKey=state.realLocalKey) {
 
 		if (logEnable) log.debug "Done negotiating session key, send actual message"
 
-		state.haveSession = true
+		staticHaveSession = true
 
 		// Time to send actual message
 		runInMillis(100, sendAll)
@@ -1221,9 +1222,9 @@ def generate_payload(String command, def data=null, String timestamp=null, byte[
 
 	sequence = 1
 	if (sequenceNr == null) {
-		sequence = state.msgseq
+		sequence = staticMsgseq
 		sequence = sequence + 1
-		state.msgseq = sequence
+		staticMsgseq = sequence
 	} else {
 		sequence = sequenceNr
 	}
@@ -1343,7 +1344,7 @@ byte[] generateKeyStartMessage() {
 
 	payload = local_nonce
 
-	if (logEnable) log.debug "Payload: $local_nonce"
+	log.debug "Payload: $local_nonce"
 
 	encrypted_payload = encrypt(payload, state.realLocalKey as byte[], false)
 
@@ -1354,9 +1355,9 @@ byte[] generateKeyStartMessage() {
 	def packed_message = new ByteArrayOutputStream()
 
 	packed_message.write(hubitat.helper.HexUtils.hexStringToByteArray(payload()[payloadFormat]["prefix_nr"]))
-	packed_message.write(state.msgseq >> 8)
-	packed_message.write(state.msgseq)
-	state.msgseq = state.msgseq + 1
+	packed_message.write(staticMsgseq >> 8)
+	packed_message.write(staticMsgseq)
+	staticMsgseq = staticMsgseq + 1
 	packed_message.write(hubitat.helper.HexUtils.hexStringToByteArray("000000"))
 	packed_message.write(getFrameTypeId("KEY_START"))
 	packed_message.write(hubitat.helper.HexUtils.hexStringToByteArray("000000"))
@@ -1392,9 +1393,9 @@ def generateGeneralMessageV3_4(byte[] data, Integer cmd, Integer msg_count=0, by
 	def packed_message = new ByteArrayOutputStream()
 
 	packed_message.write(hubitat.helper.HexUtils.hexStringToByteArray(payload()[payloadFormat]["prefix_nr"]))
-	packed_message.write(state.msgseq >> 8)
-	packed_message.write(state.msgseq)
-	state.msgseq = state.msgseq + 1
+	packed_message.write(staticMsgseq >> 8)
+	packed_message.write(staticMsgseq)
+	staticMsgseq = staticMsgseq + 1
 	packed_message.write(hubitat.helper.HexUtils.hexStringToByteArray("000000"))
 	packed_message.write(cmd)
 	packed_message.write(hubitat.helper.HexUtils.hexStringToByteArray("000000"))
