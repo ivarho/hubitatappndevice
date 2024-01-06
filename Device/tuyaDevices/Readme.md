@@ -57,7 +57,11 @@ Here is an example of data coming from the device:
 > As far as I can see "set"  message replies contains the version "field" however, "status" messages does not, so I do not have a more elegant way of determining the version on the "status" messages other than clear text meaning 3.1, and encrypted meaning 3.3.
 
 ### Version 3.4 Protocol
-Version 3.4 is quite similar to the 3.3 version, except the CRC32 checksum is replaced with a HMAC based on SHA-256. It is also slightly changed what data it uses for encrypting. Driver should have support for sending 3.4 messages, however it is not tested as I do not own a 3.4 device. So the support was developed using the tinytuya python module and comparing its output to what is generated in the driver. You might notice that the drivers have added a Self Test feature. What this does is to generate the message and compare against expected known good data.
+Version 3.4 is similar to the 3.3 version, except the CRC32 checksum is replaced with a HMAC based on SHA-256. It is also slightly changed what data it uses for encrypting.
+
+In addition protocol version 3.4 implements a session concept where HE has to set up a session with the device which results in a session key, specific to that session. When the session is over, the new session key has to be generated. All this happens under the hood in the driver.
+
+The 3.4 version has been tested with a RGBW bulb. If you have feedback on the other drivers please reach out.
 
 ***
 
