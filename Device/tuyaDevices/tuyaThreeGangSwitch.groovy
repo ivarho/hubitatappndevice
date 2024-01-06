@@ -203,10 +203,12 @@ import groovy.transform.Field
 @Field static byte[] staticSessionKey // = state.sessionKey
 @Field static String staticLocalNonce // = state.localNonce
 
+@Field static byte[] staticLocalKey
+
 // Program flow
 @Field static Integer staticRetry // = state.retry
-@Field static boolean staticHaveSession // = state.haveSession
-@Field static Short staticMsgseq // = state.msgseq
+@Field static boolean staticHaveSession = false // = state.haveSession
+@Field static Short staticMsgseq = 1 // = state.msgseq
 
 // Callback function used by HE to notify about socket changes
 // This has been reported to be buggy
@@ -319,11 +321,19 @@ Short getNewMessageSequence() {
 	return staticMsgseq
 }
 
+byte[] getRealLocalKey() {
+	if (staticLocalKey == null) {
+		staticLocalKey = localKey.replaceAll('&lt;', '<').getBytes("UTF-8")
+	}
+
+	return staticLocalKey
+}
+
+
 def _updatedTuya() {
 	statePayload = [:]
 	staticHaveSession = false
 	state.session_step = "step1"
-	state.realLocalKey = localKey.replaceAll('&lt;', '<').getBytes("UTF-8")
 	state.retry = 5
 }
 
@@ -526,7 +536,7 @@ Map decodeIncomingFrame(byte[] incomingData, Integer sofIndex=0, byte[] testKey=
 		return
 	}
 
-	byte[] useKey = state.realLocalKey
+	byte[] useKey = getRealLocalKey()
 
 	if (testKey != null) {
 		useKey = testKey
@@ -544,7 +554,7 @@ Map decodeIncomingFrame(byte[] incomingData, Integer sofIndex=0, byte[] testKey=
 			if(logEnable) log.debug "This is a key negotation response"
 			payloadStart = 20
 			payloadLength = frameLength - checksumSize - 4 - 4
-			useKey = state.realLocalKey
+			useKey = getRealLocalKey()
 			unschedule(get_session_timeout)
 			break
 		case "CONTROL":
@@ -661,7 +671,7 @@ def decryptPayload(byte[] data, byte[] key, start, length) {
 	return decrypt_bytes(payloadByteArray, key, useB64)
 }
 
-def decodeIncomingKeyResponse(String incomingData, byte[] useKey=state.realLocalKey, Short useMsgSequence=null) {
+def decodeIncomingKeyResponse(String incomingData, byte[] useKey=getRealLocalKey(), Short useMsgSequence=null) {
 	byte[] remoteNonce = incomingData[0..15].getBytes()
 
 	Mac sha256HMAC = Mac.getInstance("HmacSHA256")
@@ -680,7 +690,7 @@ def decodeIncomingKeyResponse(String incomingData, byte[] useKey=state.realLocal
 	return [message, remoteNonce]
 }
 
-def calculateSessionKey(byte[] remoteNonce, String useLocalNonce=null, byte[] key=state.realLocalKey) {
+def calculateSessionKey(byte[] remoteNonce, String useLocalNonce=null, byte[] key=getRealLocalKey()) {
 
 	byte[] localNonce = useLocalNonce==null? getLocalNonce().getBytes() : useLocalNonce.getBytes()
 
@@ -709,7 +719,7 @@ def calculateSessionKey(byte[] remoteNonce, String useLocalNonce=null, byte[] ke
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec;
 
-def generate_payload(String command, def data=null, String timestamp=null, byte[] localkey=state.realLocalKey, String devid=settings.devId, String tuyaVersion=settings.tuyaProtVersion, Short useMsgSequence=null) {
+def generate_payload(String command, def data=null, String timestamp=null, byte[] localkey=getRealLocalKey(), String devid=settings.devId, String tuyaVersion=settings.tuyaProtVersion, Short useMsgSequence=null) {
 
 	switch (tuyaVersion) {
 		case "31":
@@ -926,7 +936,7 @@ String getLocalNonce() {
 	return staticLocalNonce
 }
 
-byte[] generateKeyStartMessage(String useLocalNonce=null, byte[] useKey=state.realLocalKey, Short useMsgSequence=null) {
+byte[] generateKeyStartMessage(String useLocalNonce=null, byte[] useKey=getRealLocalKey(), Short useMsgSequence=null) {
 	payloadFormat = "v3.4"
 
 	if (logEnable) log.debug("********************** START SESSION KEY NEGOTIATION **********************")
@@ -971,7 +981,7 @@ byte[] generateKeyStartMessage(String useLocalNonce=null, byte[] useKey=state.re
 	packed_message.toByteArray()
 }
 
-def generateGeneralMessageV3_4(byte[] data, Integer cmd, byte[] useKey=state.realLocalKey, Short useMsgSequence=null){
+def generateGeneralMessageV3_4(byte[] data, Integer cmd, byte[] useKey=getRealLocalKey(), Short useMsgSequence=null){
 	payloadFormat = "v3.4"
 
 	encrypted_payload = encrypt(data, useKey, false)
@@ -1127,4 +1137,3 @@ def CRC32b(bytes, length) {
 
 	return ~crc
 }
-
