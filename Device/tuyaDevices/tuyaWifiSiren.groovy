@@ -47,7 +47,7 @@ preferences {
 		input name: "logEnable", type: "bool", title: "Enable debug logging", defaultValue: true
 		input name: "sirenSound", type: "enum", title: "Select sound for siren:", options : [1: "1", 2: "2", 3: "3", 4: "4", 5: "5", 6: "6", 7: "7", 8: "8", 9: "9", 10: "10"], defaultValue: 1
 		input name: "strobeSound", type: "enum", title: "Select sound for strobe:", options : [1: "1", 2: "2", 3: "3", 4: "4", 5: "5", 6: "6", 7: "7", 8: "8", 9: "9", 10: "10"], defaultValue: 1
-		input "tuyaProtVersion", "enum", title: "Select tuya protocol version: ", required: true, options: [31: "3.1", 33 : "3.3", 34: "3.4 (experimental)"]
+		input "tuyaProtVersion", "enum", title: "Select tuya protocol version: ", required: true, options: [31: "3.1", 33 : "3.3", 34: "3.4"]
 	}
 }
 

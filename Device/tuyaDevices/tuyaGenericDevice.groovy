@@ -34,7 +34,7 @@ preferences {
 		input "localKey", "text", title: "Device local key:", required: false
 		input name: "logEnable", type: "bool", title: "Enable debug logging", defaultValue: true
 		input "endpoint", "text", title: "End point to control: ", required: true
-		input "tuyaProtVersion", "enum", title: "Select tuya protocol version: ", required: true, options: [31: "3.1", 33 : "3.3", 34: "3.4 (experimental)"]
+		input "tuyaProtVersion", "enum", title: "Select tuya protocol version: ", required: true, options: [31: "3.1", 33 : "3.3", 34: "3.4"]
 	}
 }
 
