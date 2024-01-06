@@ -784,12 +784,23 @@ def decodeIncomingFrame(byte[] incomingData, Integer sofIndex=0, byte[] testKey=
 			useKey = state.realLocalKey
 			unschedule(get_session_timeout)
 			break
+		case "CONTROL":
 		case "CONTROL_NEW":
 			// Ignore, no useful information here
 			return
 			break
 		case "STATUS_RESP":
 			// Response to setting request
+			if (settings.tuyaProtVersion == "33") {
+				payloadStart = 35
+				payloadLength = frameLength - checksumSize - 4 - 19
+			} else if (settings.tuyaProtVersion == "34") {
+				payloadStart = 20
+				payloadLength = frameLength - checksumSize - 4 - 4
+			}
+			break
+		case "DP_QUERY":
+			// Used by 3.3 protocol
 			payloadStart = 20
 			payloadLength = frameLength - checksumSize - 4 - 4
 			break
