@@ -750,7 +750,7 @@ def new_parse(String message) {
 }
 
 def decodeIncomingFrame(byte[] incomingData, Integer sofIndex=0, byte[] testKey=null, Closure callback=null) {
-	long frameSequence = Byte.toUnsignedLong(incomingData[sofIndex + 8]) + (Byte.toUnsignedLong(incomingData[sofIndex + 7]) << 8)
+	long frameSequence = Byte.toUnsignedLong(incomingData[sofIndex + 7]) + (Byte.toUnsignedLong(incomingData[sofIndex + 8]) << 8)
 	def frameType = Byte.toUnsignedInt(incomingData[sofIndex + 11])
 	Integer frameLength = Byte.toUnsignedInt(incomingData[sofIndex + 15])
 
@@ -791,7 +791,10 @@ def decodeIncomingFrame(byte[] incomingData, Integer sofIndex=0, byte[] testKey=
 			break
 		case "STATUS_RESP":
 			// Response to setting request
-			if (settings.tuyaProtVersion == "33") {
+			if (settings.tuyaProtVersion == "31") {
+				payloadStart = 23 + 16 // 16 bytes to MD5 sum
+				payloadLength = frameLength - checksumSize - 27
+			} else if (settings.tuyaProtVersion == "33") {
 				payloadStart = 35
 				payloadLength = frameLength - checksumSize - 4 - 19
 			} else if (settings.tuyaProtVersion == "34") {
@@ -813,9 +816,10 @@ def decodeIncomingFrame(byte[] incomingData, Integer sofIndex=0, byte[] testKey=
 
 	String plainTextMessage = ""
 
-	if (incomingData[0] == '{') {
+	if (incomingData[sofIndex + payloadStart] == '{') {
 		// Incoming data is plain text
-		plainTextMessage = incomingData.toString()
+		plainTextMessage = new String(incomingData, "UTF-8")[(sofIndex + payloadStart)..(sofIndex + payloadStart + payloadLength - 1)]
+		if (logEnable) log.debug "Unencrypted message: $plainTextMessage"
 	} else {
 		// Incoming data is encrypted
 		plainTextMessage = decryptPayload(incomingData as byte[], useKey, sofIndex + payloadStart, payloadLength)
@@ -887,7 +891,10 @@ def decryptPayload(byte[] data, byte[] key, start, length) {
 
 	if(logEnable) log.debug "Payload for decrypt [$start..$length]: " + hubitat.helper.HexUtils.byteArrayToHexString(payloadByteArray)
 
-	return decrypt_bytes(payloadByteArray, key, false)
+	// Protocol version 3.1 uses base64 conversion
+	boolean useB64 = settings.tuyaProtVersion == "31" ? true : false
+
+	return decrypt_bytes(payloadByteArray, key, useB64)
 }
 
 def decodeIncomingKeyResponse(String incomingData, byte[] useKey=state.realLocalKey, Short useMsgSequence=null) {
