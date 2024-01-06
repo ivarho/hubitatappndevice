@@ -643,8 +643,13 @@ def DriverSelfTest() {
 	DriverSelfTestReport("GenerateSessionKeyReqStep1", generatedTestVector, expected)
 
 	// Testing Reception of Session key request answer (2nd)
+	expectedRemoteNonce = "38a5c312169ac81b"
+	(generatedTestVector, generatedRemoteNonce) = decodeIncomingKeyResponse("38a5c312169ac81b76y3hjbfiauhsndlkakjhbsadbuhyuywjhbcaj", "7ae83ffe1980sa3c".getBytes("UTF-8"), 7 as Short)
+	DriverSelfTestReport("ReceptionOfNonceV3_4", new String(generatedRemoteNonce, "UTF-8"), expectedRemoteNonce)
 
 	// Testing Generating Session key final answer (3rd)
+	expected = "000055AA000000070000000500000054494C4CF320214B11CE224DBD40E5FC8608A08A33764CA039B2A09B39BFF6DFC0103D2D5B1508ABFA4BCDE07FC047EAFA33D53D2776CF99A4C2375C698985BC6F47EF698BCCE3BDFC56C73004297EB6330000AA55"
+	DriverSelfTestReport("AnswerReceptionOfNonceV3_4", hubitat.helper.HexUtils.byteArrayToHexString(generatedTestVector), expected)
 
 	// Testing Generating Sesson key
 	expected = "34A80557C18868E1D090E3B210FBC253"
@@ -814,6 +819,7 @@ def decodeIncomingFrame(byte[] incomingData, Integer sofIndex=0, byte[] testKey=
 			byte[] responseOnKeyResponse
 			byte[] remoteNonce
 			(responseOnKeyResponse, remoteNonce) = decodeIncomingKeyResponse(plainTextMessage)
+			state.session_step = "step3"
 			socket_write(responseOnKeyResponse)
 
 			state.sessionKey = calculateSessionKey(remoteNonce)
@@ -862,11 +868,11 @@ def decryptPayload(byte[] data, byte[] key, start, length) {
 	return decrypt_bytes(payloadByteArray, key, false)
 }
 
-def decodeIncomingKeyResponse(String incomingData) {
+def decodeIncomingKeyResponse(String incomingData, byte[] useKey=state.realLocalKey, Short useMsgSequence=null) {
 	byte[] remoteNonce = incomingData[0..15].getBytes()
 
 	Mac sha256HMAC = Mac.getInstance("HmacSHA256")
-	SecretKeySpec key = new SecretKeySpec(state.realLocalKey as byte[], "HmacSHA256")
+	SecretKeySpec key = new SecretKeySpec(useKey, "HmacSHA256")
 
 	sha256HMAC.init(key)
 	sha256HMAC.update(remoteNonce, 0, remoteNonce.size())
@@ -874,11 +880,9 @@ def decodeIncomingKeyResponse(String incomingData) {
 
 	if(logEnable) log.debug "Calculated key negotiation answer payload: " + hubitat.helper.HexUtils.byteArrayToHexString(digest)
 
-	byte[] message = generateGeneralMessageV3_4(digest, getFrameTypeId("KEY_FINAL"))
+	byte[] message = generateGeneralMessageV3_4(digest, getFrameTypeId("KEY_FINAL"), useKey, useMsgSequence)
 
 	if(logEnable) log.debug "message to send: " + hubitat.helper.HexUtils.byteArrayToHexString(message)
-
-	state.session_step = "step3"
 
 	return [message, remoteNonce]
 }
@@ -1095,7 +1099,7 @@ def parse(String description, byte[] decryptKey=state.realLocalKey) {
 
 		if(logEnable) log.debug "step3 payload: " + hubitat.helper.HexUtils.byteArrayToHexString(digest)
 
-		byte[] msg = generateGeneralMessageV3_4(digest, 5, 2)
+		byte[] msg = generateGeneralMessageV3_4(digest, 5)
 
 		if(logEnable) log.debug "message to send: " + hubitat.helper.HexUtils.byteArrayToHexString(msg)
 
@@ -1408,10 +1412,10 @@ byte[] generateKeyStartMessage(String useLocalNonce=null, byte[] useKey=state.re
 	packed_message.toByteArray()
 }
 
-def generateGeneralMessageV3_4(byte[] data, Integer cmd, Integer msg_count=0, byte[] key=state.realLocalKey) {
+def generateGeneralMessageV3_4(byte[] data, Integer cmd, byte[] useKey=state.realLocalKey, Short useMsgSequence=null){
 	payloadFormat = "v3.4"
 
-	encrypted_payload = encrypt(data, key, false)
+	encrypted_payload = encrypt(data, useKey, false)
 
 	if (logEnable) log.debug("payload encrypted: " + encrypted_payload)
 
@@ -1433,7 +1437,7 @@ def generateGeneralMessageV3_4(byte[] data, Integer cmd, Integer msg_count=0, by
 	if (logEnable) log.debug hubitat.helper.HexUtils.byteArrayToHexString(packed_message.toByteArray())
 
 	Mac sha256_hmac = Mac.getInstance("HmacSHA256")
-	SecretKeySpec keySpec = new SecretKeySpec(key, "HmacSHA256")
+	SecretKeySpec keySpec = new SecretKeySpec(useKey, "HmacSHA256")
 
 	sha256_hmac.init(keySpec)
 	sha256_hmac.update(packed_message.toByteArray(), 0, packed_message.size())
