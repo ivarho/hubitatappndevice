@@ -465,15 +465,24 @@ def socketStatus(String socketMessage) {
 	}
 }
 
-def socket_connect() {
+boolean socket_connect() {
 
 	if (logEnable) log.debug "Socket connect: $settings.ipaddress at port: 6668"
+
+	boolean returnStatus = true
 
 	try {
 		//port 6668
 		interfaces.rawSocket.connect(settings.ipaddress, 6668, byteInterface: true, readDelay: 150)
+		returnStatus = true
+	} catch (java.net.NoRouteToHostException ex) {
+		log.error "Can't connect to device, make sure correct IP address, try running 'python -m tinytuya scan' to verify, also try to power device on and off"
+		returnStatus = false
 	} catch (e) {
 		log.error "Error $e"
+		returnStatus = false
+	} finally {
+		return returnStatus
 	}
 }
 
@@ -491,6 +500,8 @@ def socket_write(byte[] message) {
 
 def socket_close() {
 	if(logEnable) log.debug "Socket: close"
+
+	unschedule(sendTimeout)
 
 	state.session_step = "step1"
 	staticHaveSession = false
@@ -1313,8 +1324,7 @@ def get_session(tuyaVersion) {
 
 	if (tuyaVersion.toInteger() <= 33) {
 		// Don't need to get session, just send message
-		socket_connect()
-		return true
+		return socket_connect()
 	}
 
 	current_session_state = state.session_step
