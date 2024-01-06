@@ -645,7 +645,7 @@ def DriverSelfTest() {
 
 	// Testing Generating Sesson key
 	expected = "34A80557C18868E1D090E3B210FBC253"
-	generatedTestVector = calculateSessionKey('0123456789abcdef'.getBytes("UTF-8"), '2Y3iba43!2()4!!u'.getBytes("UTF-8"), "7ae83ffe1980sa3c".getBytes("UTF-8"))
+	generatedTestVector = calculateSessionKey('0123456789abcdef'.getBytes("UTF-8"), '2Y3iba43!2()4!!u', "7ae83ffe1980sa3c".getBytes("UTF-8"))
 	DriverSelfTestReport("GenerateSessionKeyV3_4", generatedTestVector, expected)
 
 	// Test decoding of incoming frame
@@ -880,7 +880,9 @@ def decodeIncomingKeyResponse(String incomingData) {
 	return [message, remoteNonce]
 }
 
-def calculateSessionKey(byte[] remoteNonce, byte[] localNonce=state.localNonce?.getBytes(), byte[] key=state.realLocalKey) {
+def calculateSessionKey(byte[] remoteNonce, String useLocalNonce=null, byte[] key=state.realLocalKey) {
+
+	byte[] localNonce = useLocalNonce==null? getLocalNonce().getBytes() : useLocalNonce.getBytes()
 
 	byte[] calKey = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 
@@ -1351,27 +1353,25 @@ def generateLocalNonce(Integer length=16) {
 	return nonce
 }
 
-byte[] generateKeyStartMessage() {
+String getLocalNonce() {
+	if (staticLocalNonce == null) {
+		staticLocalNonce = generateLocalNonce()
+	}
+	return staticLocalNonce
+}
+
+byte[] generateKeyStartMessage(Short useMsgSequence=null, String useLocalNonce=null) {
 	payloadFormat = "v3.4"
 
 	if (logEnable) log.debug("*** Starting session key negotiation ***")
 
-	local_nonce = ""
+	payload = useLocalNonce==null? getLocalNonce() : useLocalNonce
 
-	if (state.localNonce == null) {
-		local_nonce = generateLocalNonce()
-		state.localNonce = local_nonce
-	} else {
-		local_nonce = state.localNonce
-	}
-
-	payload = local_nonce
-
-	log.debug "Payload: $local_nonce"
+	if (logEnable) log.debug "Payload (local nonce): $payload"
 
 	encrypted_payload = encrypt(payload, state.realLocalKey as byte[], false)
 
-	if (logEnable) log.debug("payload encrypted: " + encrypted_payload)
+	if (logEnable) log.debug("Payload (local nonce) encrypted: " + encrypted_payload)
 
 	encrypted_payload = hubitat.helper.HexUtils.hexStringToByteArray(encrypted_payload)
 
