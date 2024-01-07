@@ -132,7 +132,7 @@ import groovy.transform.Field
 // Callback function used by HE to notify about socket changes
 // This has been reported to be buggy
 def socketStatus(String socketMessage) {
-	log.warn "Socket status message received: " + socketMessage
+	if(logEnable) log.warn "Socket status message received: " + socketMessage
 
 	if (socketMessage == "send error: Broken pipe (Write failed)") {
 		socket_close()
@@ -141,7 +141,7 @@ def socketStatus(String socketMessage) {
 	if (socketMessage.contains('disconnect')) {
 		socket_close()
 
-		if (settings.autoReconnect == true) {
+		if (settings.autoReconnect == true || settings.autoReconnect == null) {
 			staticHaveSession = get_session(settings.tuyaProtVersion)
 		}
 	}
