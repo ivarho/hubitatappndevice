@@ -40,14 +40,18 @@ metadata {
 }
 
 preferences {
-	section("Setttings") {
-		input "ipaddress", "text", title: "Device IP:", required: false
-		input "devId", "text", title: "Device ID:", required: false
-		input "localKey", "text", title: "Device local key:", required: false
-		input name: "logEnable", type: "bool", title: "Enable debug logging", defaultValue: true
+	section("tuya Device Config") {
+		input "ipaddress", "text", title: "Device IP:", required: true, description: "<small>tuya deivce local IP address. Found by using tools like tinytuya. Tip: configure a fixed IP address for your tuya device on your network to make sure the IP does not change over time.</small>"
+		input "devId", "text", title: "Device ID:", required: true, description: "<small>Unique tuya device ID. Found by using tools like tinytuya.</small>"
+		input "localKey", "text", title: "Device local key:", required: true, description: "<small>The local key used  for encrypted communication between HE and the tuya Deivce. Found by using tools like tinytuya.</small>"
+		input name: "logEnable", type: "bool", title: "Enable debug logging", defaultValue: true, description: "<small>If issues are experienced it might help to turn on debug logging and see the debug logs, automatically turned off after 30 min. Check device IP, ID and local key make sure they are correct. Also a power off/on on the tuya device might help.</small>"
+		input "tuyaProtVersion", "enum", title: "Select tuya protocol version: ", required: true, options: [31: "3.1", 33 : "3.3", 34: "3.4"], description: "<small>Select the correct protocol version corresponding to your device. If you run firmware update on the device you should expect the driver protocol version to update. Which protocol is used can be found using tools like tinytuya.</small>"
+		input name: "poll_interval", type: "enum", title: "Configure poll interval:", options: [0: "No polling", 1:"Every 1 second", 2:"Every 2 second", 3: "Every 3 second", 5: "Every 5 second", 10: "Every 10 second", 15: "Every 15 second", 20: "Every 20 second", 30: "Every 30 second", 60: "Every 1 min", 120: "Every 2 min", 180: "Every 3 min"], description: "<small>Old way of reading status of the deivce. Use \"No polling\" when auto reconnect is enabled.</small>"
+		input name: "autoReconnect", type: "bool", title: "Auto reconnect on socket close", defaultValue: true, description: "<small>A communication channel is kept open between HE and the tuya device. Every 30 s the socket is closed and re-opened. This is useful if the device is a switch, or is also being controlled from external apps like Smart Life etc.</small>"
+	}
+	section("Other") {
 		input name: "sirenSound", type: "enum", title: "Select sound for siren:", options : [1: "1", 2: "2", 3: "3", 4: "4", 5: "5", 6: "6", 7: "7", 8: "8", 9: "9", 10: "10"], defaultValue: 1
 		input name: "strobeSound", type: "enum", title: "Select sound for strobe:", options : [1: "1", 2: "2", 3: "3", 4: "4", 5: "5", 6: "6", 7: "7", 8: "8", 9: "9", 10: "10"], defaultValue: 1
-		input "tuyaProtVersion", "enum", title: "Select tuya protocol version: ", required: true, options: [31: "3.1", 33 : "3.3", 34: "3.4"]
 	}
 }
 
@@ -170,6 +174,10 @@ def socketStatus(String socketMessage) {
 
 	if (socketMessage.contains('disconnect')) {
 		socket_close()
+
+		if (settings.autoReconnect == true) {
+			staticHaveSession = get_session(settings.tuyaProtVersion)
+		}
 	}
 }
 
@@ -244,7 +252,6 @@ def send(String command, Map message=null) {
 	staticHaveSession = sessionState
 
 	runInMillis(1000, sendTimeout)
-	runIn(30, socketStatus, [data: "disconnect: pipe closed (driver forced)"])
 }
 
 def sendAll() {
@@ -513,6 +520,7 @@ Map decodeIncomingFrame(byte[] incomingData, Integer sofIndex=0, byte[] testKey=
 			break
 		case "STATUS_RESP":
 			// Response to setting request
+			fCommand = ""
 			if (settings.tuyaProtVersion == "31") {
 				payloadStart = 23 + 16 // 16 bytes to MD5 sum
 				payloadLength = frameLength - checksumSize - 27
@@ -525,11 +533,13 @@ Map decodeIncomingFrame(byte[] incomingData, Integer sofIndex=0, byte[] testKey=
 			}
 			break
 		case "DP_QUERY":
+			fCommand = ""
 			// Used by 3.3 protocol
 			payloadStart = 20
 			payloadLength = frameLength - checksumSize - 4 - 4
 			break
 		case "DP_QUERY_NEW":
+			fCommand = ""
 			// Response to status request
 			payloadStart = 20
 			payloadLength = frameLength - checksumSize - 4 - 4
@@ -832,6 +842,7 @@ def get_session(tuyaVersion) {
 
 	if (tuyaVersion.toInteger() <= 33) {
 		// Don't need to get session, just send message
+		runIn(30, socketStatus, [data: "disconnect: pipe closed (driver forced)"])
 		return socket_connect()
 	}
 
@@ -843,6 +854,7 @@ def get_session(tuyaVersion) {
 
 	switch (current_session_state) {
 		case "step1":
+			runIn(30, socketStatus, [data: "disconnect: pipe closed (driver forced)"])
 			socket_connect()
 			state.session_step = "step2"
 			state.session_step = "step2"
