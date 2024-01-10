@@ -36,6 +36,7 @@ metadata {
 		command "SendCustomDataToDevice", [[name:"endpoint*", type:"NUMBER", description:"To which endpint(dps) do you want the data to be sent"], [name:"data*", type:"STRING", description:"the data to be sent, treated as string, but true and false is converted"]]
 		command "DriverSelfTest"
 		command "Disconnect"
+		command "SendCustomJSONObject", [[name:"jsonPayload*", type: "STRING", description:"Format: {\"20\":true, \"22\":250, \"21\":\"white\"}"]]
 
 		attribute "rawMessage", "String"
 	}
@@ -314,6 +315,16 @@ def SendCustomDataToDevice(endpoint, data) {
 	}
 
 	send("set", ["${endpoint}":data])
+}
+
+def SendCustomJSONObject(String _s_json_data)
+{
+	status = [:]
+
+	def jsonSlurper = new groovy.json.JsonSlurper()
+	status = jsonSlurper.parseText(_s_json_data.substring(_s_json_data.indexOf('{')))
+
+	send("set", status)
 }
 
 def sendSetMessage() {
