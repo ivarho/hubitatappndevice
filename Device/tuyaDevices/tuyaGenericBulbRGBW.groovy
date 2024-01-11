@@ -31,6 +31,7 @@ metadata {
 		capability "SwitchLevel"
 		capability "Switch"
 		capability "LightEffects"
+		capability "PresenceSensor"
 
 		command "status"
 		command "SendCustomDataToDevice", [[name:"endpoint*", type:"NUMBER", description:"To which endpint(dps) do you want the data to be sent"], [name:"data*", type:"STRING", description:"the data to be sent, treated as string, but true and false is converted"]]
@@ -480,7 +481,7 @@ import groovy.transform.Field
 // Callback function used by HE to notify about socket changes
 // This has been reported to be buggy
 def socketStatus(String socketMessage) {
-	if(logEnable) log.warn "Socket status message received: " + socketMessage
+	if(logEnable) log.info "Socket status message received: " + socketMessage
 
 	if (socketMessage == "send error: Broken pipe (Write failed)") {
 		unschedule(heartbeat)
@@ -489,10 +490,14 @@ def socketStatus(String socketMessage) {
 
 	if (socketMessage.contains('disconnect')) {
 		unschedule(heartbeat)
-		socket_close()
+		socket_close(settings.autoReconnect == true)
 
 		if (settings.autoReconnect == true || settings.autoReconnect == null) {
 			staticHaveSession = get_session(settings.tuyaProtVersion)
+
+			if (staticHaveSession == false) {
+				sendEvent(name: "presence", value: "not present")
+			}
 		}
 	}
 }
@@ -508,7 +513,10 @@ boolean socket_connect() {
 		interfaces.rawSocket.connect(settings.ipaddress, 6668, byteInterface: true, readDelay: 150)
 		returnStatus = true
 	} catch (java.net.NoRouteToHostException ex) {
-		log.error "Can't connect to device, make sure correct IP address, try running 'python -m tinytuya scan' to verify, also try to power device on and off"
+		log.error "$ex - Can't connect to device, make sure correct IP address, try running 'python -m tinytuya scan' to verify, also try to power device on and off"
+		returnStatus = false
+	} catch (java.net.SocketTimeoutException ex) {
+		log.error "$ex - Can't connect to device, make sure correct IP address, try running 'python -m tinytuya scan' to verify, also try to power device on and off"
 		returnStatus = false
 	} catch (e) {
 		log.error "Error $e"
@@ -530,10 +538,14 @@ def socket_write(byte[] message) {
 	}
 }
 
-def socket_close() {
+def socket_close(boolean willTryToReconnect=false) {
 	if(logEnable) log.debug "Socket: close"
 
 	unschedule(sendTimeout)
+
+	if (willTryToReconnect == false) {
+		sendEvent(name: "presence", value: "not present")
+	}
 
 	state.session_step = "step1"
 	staticHaveSession = false
@@ -906,13 +918,15 @@ Map decodeIncomingFrame(byte[] incomingData, Integer sofIndex=0, byte[] testKey=
 			state.session_step = "final"
 			staticHaveSession = true
 
+			sendEvent(name: "presence", value: "present")
+
 			// Time to send actual message
 			runInMillis(100, sendAll)
 
 			if (heartBeatMethod) {
 				runIn(20, heartbeat)
 			} else {
-				runIn(30, socketStatus, [data: "disconnect: pipe closed (driver forced)"])
+				runIn(30, socketStatus, [data: "disconnect: pipe closed (driver forced - expected behaviour)"])
 			}
 
 			// No further actions needed on key response
@@ -925,6 +939,10 @@ Map decodeIncomingFrame(byte[] incomingData, Integer sofIndex=0, byte[] testKey=
 			if (settings.tuyaProtVersion == "34") {
 				status = status["data"]
 			}
+			break
+		case "HEART_BEAT":
+			unschedule(socketStatus)
+			runIn(18, heartbeat)
 			break
 	}
 
@@ -1012,7 +1030,7 @@ def Disconnect() {
 
 def heartbeat() {
 	send("hb")
-	runIn(20, heartbeat)
+	runIn(30, socketStatus, [data: "disconnect: pipe closed (driver forced - expected behaviour)"])
 }
 
 import javax.crypto.Mac
@@ -1185,9 +1203,16 @@ def get_session(tuyaVersion) {
 		if (heartBeatMethod) {
 			runIn(20, heartbeat)
 		} else {
-			runIn(30, socketStatus, [data: "disconnect: pipe closed (driver forced)"])
+			runIn(30, socketStatus, [data: "disconnect: pipe closed (driver forced - expected behaviour)"])
 		}
-		return socket_connect()
+
+		boolean socket_connect_ret = socket_connect()
+
+		if (socket_connect_ret == true) {
+			sendEvent(name: "presence", value: "present")
+		}
+
+		return socket_connect_ret
 	}
 
 	current_session_state = state.session_step

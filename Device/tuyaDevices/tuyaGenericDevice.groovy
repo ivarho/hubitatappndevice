@@ -20,8 +20,10 @@ metadata {
 		capability "Actuator"
 		capability "Switch"
 		capability "Sensor"
+		capability "PresenceSensor"
 
 		command "status"
+		command "Disconnect"
 
 		attribute "availableEndpoints", "String"
 	}
@@ -36,6 +38,7 @@ preferences {
 		input "tuyaProtVersion", "enum", title: "Select tuya protocol version: ", required: true, options: [31: "3.1", 33 : "3.3", 34: "3.4"], description: "<small>Select the correct protocol version corresponding to your device. If you run firmware update on the device you should expect the driver protocol version to update. Which protocol is used can be found using tools like tinytuya.</small>"
 		input name: "poll_interval", type: "enum", title: "Configure poll interval:", options: [0: "No polling", 1:"Every 1 second", 2:"Every 2 second", 3: "Every 3 second", 5: "Every 5 second", 10: "Every 10 second", 15: "Every 15 second", 20: "Every 20 second", 30: "Every 30 second", 60: "Every 1 min", 120: "Every 2 min", 180: "Every 3 min"], description: "<small>Old way of reading status of the deivce. Use \"No polling\" when auto reconnect is enabled.</small>"
 		input name: "autoReconnect", type: "bool", title: "Auto reconnect on socket close", defaultValue: true, description: "<small>A communication channel is kept open between HE and the tuya device. Every 30 s the socket is closed and re-opened. This is useful if the device is a switch, or is also being controlled from external apps like Smart Life etc.</small>"
+		input name: "heartBeatMethod", type: "bool", title: "Use heart beat method to keep connection alive", defaultValue: false, description: "<small>Use a heart beat to keep the connection alive, i.e. a message is sent every 20 seconds to the device, the causes less data traffic on <b>3.4</b> devices as sessions don't have to be negotiated all the time.</small>"
 	}
 	section("Other") {
 		input "endpoint", "text", title: "End point to control: ", required: true
@@ -132,17 +135,23 @@ import groovy.transform.Field
 // Callback function used by HE to notify about socket changes
 // This has been reported to be buggy
 def socketStatus(String socketMessage) {
-	if(logEnable) log.warn "Socket status message received: " + socketMessage
+	if(logEnable) log.info "Socket status message received: " + socketMessage
 
 	if (socketMessage == "send error: Broken pipe (Write failed)") {
+		unschedule(heartbeat)
 		socket_close()
 	}
 
 	if (socketMessage.contains('disconnect')) {
-		socket_close()
+		unschedule(heartbeat)
+		socket_close(settings.autoReconnect == true)
 
 		if (settings.autoReconnect == true || settings.autoReconnect == null) {
 			staticHaveSession = get_session(settings.tuyaProtVersion)
+
+			if (staticHaveSession == false) {
+				sendEvent(name: "presence", value: "not present")
+			}
 		}
 	}
 }
@@ -158,7 +167,10 @@ boolean socket_connect() {
 		interfaces.rawSocket.connect(settings.ipaddress, 6668, byteInterface: true, readDelay: 150)
 		returnStatus = true
 	} catch (java.net.NoRouteToHostException ex) {
-		log.error "Can't connect to device, make sure correct IP address, try running 'python -m tinytuya scan' to verify, also try to power device on and off"
+		log.error "$ex - Can't connect to device, make sure correct IP address, try running 'python -m tinytuya scan' to verify, also try to power device on and off"
+		returnStatus = false
+	} catch (java.net.SocketTimeoutException ex) {
+		log.error "$ex - Can't connect to device, make sure correct IP address, try running 'python -m tinytuya scan' to verify, also try to power device on and off"
 		returnStatus = false
 	} catch (e) {
 		log.error "Error $e"
@@ -180,10 +192,14 @@ def socket_write(byte[] message) {
 	}
 }
 
-def socket_close() {
+def socket_close(boolean willTryToReconnect=false) {
 	if(logEnable) log.debug "Socket: close"
 
 	unschedule(sendTimeout)
+
+	if (willTryToReconnect == false) {
+		sendEvent(name: "presence", value: "not present")
+	}
 
 	state.session_step = "step1"
 	staticHaveSession = false
@@ -379,6 +395,7 @@ def DriverSelfTestCallback(def status) {
 	5:  "KEY_FINAL",
 	7:  "CONTROL",
 	8:  "STATUS_RESP",
+	9:  "HEART_BEAT",
 	10: "DP_QUERY",
 	13: "CONTROL_NEW",
 	16: "DP_QUERY_NEW"]
@@ -436,7 +453,7 @@ List _parseTuya(String message) {
 
 	startIndexes.each {
 		Map result = decodeIncomingFrame(incomingData as byte[], it as Integer)
-		if (result != null) {
+		if (result != null && result != [:]) {
 			results.add(result)
 		}
 	}
@@ -498,6 +515,11 @@ Map decodeIncomingFrame(byte[] incomingData, Integer sofIndex=0, byte[] testKey=
 				payloadLength = frameLength - checksumSize - 4 - 4
 			}
 			break
+		case "HEART_BEAT":
+			fCommand = ""
+			payloadStart = 20
+			payloadLength = frameLength - checksumSize - 4 - 4
+			break
 		case "DP_QUERY":
 			fCommand = ""
 			// Used by 3.3 protocol
@@ -550,8 +572,16 @@ Map decodeIncomingFrame(byte[] incomingData, Integer sofIndex=0, byte[] testKey=
 			state.session_step = "final"
 			staticHaveSession = true
 
+			sendEvent(name: "presence", value: "present")
+
 			// Time to send actual message
 			runInMillis(100, sendAll)
+
+			if (heartBeatMethod) {
+				runIn(20, heartbeat)
+			} else {
+				runIn(30, socketStatus, [data: "disconnect: pipe closed (driver forced - expected behaviour)"])
+			}
 
 			// No further actions needed on key response
 			return
@@ -564,6 +594,10 @@ Map decodeIncomingFrame(byte[] incomingData, Integer sofIndex=0, byte[] testKey=
 				status = status["data"]
 			}
 			break
+		case "HEART_BEAT":
+			unschedule(socketStatus)
+			runIn(18, heartbeat)
+			break
 	}
 
 	if(logEnable) log.debug "JSON object: $status"
@@ -574,7 +608,9 @@ Map decodeIncomingFrame(byte[] incomingData, Integer sofIndex=0, byte[] testKey=
 	}
 
 	// For debugging
-	sendEvent(name: "rawMessage", value: status.dps)
+	if (status != null && status != [:]) {
+		sendEvent(name: "rawMessage", value: status.dps)
+	}
 
 	return status
 }
@@ -639,6 +675,16 @@ def calculateSessionKey(byte[] remoteNonce, String useLocalNonce=null, byte[] ke
 	if(logEnable) log.debug "********************** DONE  SESSION KEY NEGOTIATION **********************"
 
 	return sessKeyByteArray
+}
+
+def Disconnect() {
+	unschedule(heartbeat)
+	socket_close()
+}
+
+def heartbeat() {
+	send("hb")
+	runIn(30, socketStatus, [data: "disconnect: pipe closed (driver forced - expected behaviour)"])
 }
 
 import javax.crypto.Mac
@@ -722,7 +768,7 @@ def generate_payload(String command, def data=null, String timestamp=null, byte[
 
 		if (logEnable) log.debug encrypted_payload
 
-		if (command != "status") {
+		if (command != "status" && command != "nb") {
 			contructed_payload.write("3.3\0\0\0\0\0\0\0\0\0\0\0\0".getBytes())
 			contructed_payload.write(hubitat.helper.HexUtils.hexStringToByteArray(encrypted_payload))
 		} else {
@@ -730,7 +776,7 @@ def generate_payload(String command, def data=null, String timestamp=null, byte[
 		}
 
 	} else if (tuyaVersion == "34") {
-		if (command != "status") {
+		if (command != "status" && command != "hb") {
 			json_payload = "3.4\0\0\0\0\0\0\0\0\0\0\0\0" + json_payload
 		}
 		encrypted_payload = encrypt(json_payload, localkey as byte[], false)
@@ -808,8 +854,19 @@ def get_session(tuyaVersion) {
 
 	if (tuyaVersion.toInteger() <= 33) {
 		// Don't need to get session, just send message
-		runIn(30, socketStatus, [data: "disconnect: pipe closed (driver forced)"])
-		return socket_connect()
+		if (heartBeatMethod) {
+			runIn(20, heartbeat)
+		} else {
+			runIn(30, socketStatus, [data: "disconnect: pipe closed (driver forced - expected behaviour)"])
+		}
+
+		boolean socket_connect_ret = socket_connect()
+
+		if (socket_connect_ret == true) {
+			sendEvent(name: "presence", value: "present")
+		}
+
+		return socket_connect_ret
 	}
 
 	current_session_state = state.session_step
@@ -820,9 +877,7 @@ def get_session(tuyaVersion) {
 
 	switch (current_session_state) {
 		case "step1":
-			runIn(30, socketStatus, [data: "disconnect: pipe closed (driver forced)"])
 			socket_connect()
-			state.session_step = "step2"
 			state.session_step = "step2"
 			socket_write(generateKeyStartMessage())
 			runInMillis(750, get_session_timeout)
@@ -960,6 +1015,10 @@ def payload()
 				"hexByte": "07",
 				"command": ["devId":"", "uid": "", "t": ""]
 			],
+			"hb" : [
+				"hexByte": "09",
+				"command": ["gwId":"", "devId":""]
+			],
 			"prefix_nr": "000055aa0000",
 			"prefix": "000055aa00000000000000",
 			"suffix": "0000aa55"
@@ -972,6 +1031,10 @@ def payload()
 			"set": [
 				"hexByte": "0d",
 				"command": ["protocol":5,"t":"","data":""]
+			],
+			"hb" : [
+				"hexByte": "09",
+				"command": ["gwId":"", "devId":""]
 			],
 			"neg1" : [
 				"hexByte": "03"
