@@ -124,7 +124,7 @@ def turnOffSwitch() {
 		runIn(5*60, verifySwitchOff)
 	}
 
-	unschedule(turnOffSwitch)
+
 
 	def ControllerSwitch = getChildDevices()[0]
 	ControllerSwitch?.setChargerStart("--:-- <small>(awaiting plan)</small>")
@@ -144,7 +144,7 @@ def turnOnSwitch() {
 		runIn(5*60, verifySwitchOn)
 	}
 
-	unschedule(turnOnSwitch)
+
 }
 
 List getSchedule(earliest, latest, Long runTime, List priceInformation, keepOnAtEnd=false)
