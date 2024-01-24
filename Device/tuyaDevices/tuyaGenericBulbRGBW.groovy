@@ -40,6 +40,7 @@ metadata {
 		command "SendCustomJSONObject", [[name:"jsonPayload*", type: "STRING", description:"Format: {\"20\":true, \"22\":250, \"21\":\"white\"}"]]
 
 		attribute "rawMessage", "String"
+		attribute "whiteLevel", "Number"
 	}
 }
 
@@ -51,8 +52,9 @@ preferences {
 		input name: "logEnable", type: "bool", title: "Enable debug logging", defaultValue: true, description: "<small>If issues are experienced it might help to turn on debug logging and see the debug logs, automatically turned off after 30 min. Check device IP, ID and local key make sure they are correct. Also a power off/on on the tuya device might help.</small>"
 		input "tuyaProtVersion", "enum", title: "Select tuya protocol version: ", required: true, options: [31: "3.1", 33 : "3.3", 34: "3.4"], description: "<small>Select the correct protocol version corresponding to your device. If you run firmware update on the device you should expect the driver protocol version to update. Which protocol is used can be found using tools like tinytuya.</small>"
 		input name: "poll_interval", type: "enum", title: "Configure poll interval:", options: [0: "No polling", 1:"Every 1 second", 2:"Every 2 second", 3: "Every 3 second", 5: "Every 5 second", 10: "Every 10 second", 15: "Every 15 second", 20: "Every 20 second", 30: "Every 30 second", 60: "Every 1 min", 120: "Every 2 min", 180: "Every 3 min"], description: "<small>Old way of reading status of the deivce. Use \"No polling\" when auto reconnect or heart beat is enabled.</small>"
-		input name: "autoReconnect", type: "bool", title: "Auto reconnect on socket close", defaultValue: true, description: "<small>A communication channel is kept open between HE and the tuya device. Every 30 s the socket is closed and re-opened. This is useful if the device is a switch, or is also being controlled from external apps like Smart Life etc. For <b>3.4</b> devices see the Use heart beat method instead.</small>"
+		input name: "autoReconnect", type: "bool", title: "Auto reconnect on socket close", defaultValue: true, description: "<small>A communication channel is kept open between HE and the tuya device. Every 30 s the socket is closed and re-opened. This is useful if the device is a switch, or is also being controlled from external apps like Smart Life etc. For <b>3.4</b> devices see the Use heart beat method instead in combination with this one.</small>"
 		input name: "heartBeatMethod", type: "bool", title: "Use heart beat method to keep connection alive", defaultValue: false, description: "<small>Use a heart beat to keep the connection alive, i.e. a message is sent every 20 seconds to the device, the causes less data traffic on <b>3.4</b> devices as sessions don't have to be negotiated all the time.</small>"
+		input name: "useDP28MultiControl" , type: "bool", title: "Use DP 28 which allows for controlling both the white and color mode at the same time", defaultValue: false, description: "<small>Enable this to control both the R G B and W LED output of the bulb, for multi color devices, or just making special color mixing.<hr><br><b>WARNING!</b> Bulb does not respond back with its current state, i.e. this is a hub to bulb only communication. Dashboard tiles etc. will not react correctly.</small>"
 	}
 	section("Other") {
 		input name: "color_mode", type: "enum", title: "Configure bulb color mode:", defaultValue: "hsv", options: ["hsv": "HSV (native Hubitat)", "hsl": "HSL"]
@@ -121,9 +123,10 @@ def setColorTemperature(colortemperature, level=null, transitionTime=null) {
 
 	setMap[23] = bulb_ct_setting
 
-	if (level != null) {
+	// Level 0 is not allowed accoring to the tuya standard, except when using DP28
+	if (level != null || level != 0) {
 		if (level > 100) level = 100
-		if (level < 0) level = 0
+		if (level < 0) level = 1
 
 		setMap[22] = level*10
 	}
@@ -133,12 +136,67 @@ def setColorTemperature(colortemperature, level=null, transitionTime=null) {
 		setMap[26] = transitionTime
 	}*/
 
-	//send(generate_payload("set", setMap))
+	// Adding support for devices supporting dual mode, DP28
+	if (useDP28MultiControl == true) {
+		setMap = [:]
+
+		setMap[28] = handleDP28DualMode(null, null, null, colortemp = bulb_ct_setting,  level = (level*10).toBigInteger())
+		log.warn "This is the setmap: " + setMap[28]
+	}
 
 	statePayload += setMap
 
 	runInMillis(250, 'sendSetMessage')
 }
+
+def handleDP28DualMode(BigInteger hue=null, BigInteger sat=null, BigInteger val=null, BigInteger colortemp=null, BigInteger level=null)
+{
+	String hue_s, sat_s, val_s, colortemp_s, level_s
+
+	//def hubiat_map_hsl = hsvToHsl(device.currentValue("hue"), device.currentValue("saturation"), device.currentValue("level"))
+	def hubiat_map_hsl = ["hue":device.currentValue("hue"), "saturation":device.currentValue("saturation"), "level":device.currentValue("level")]
+
+	log.debug hubiat_map_hsl
+
+	// hue
+	if (hue == null) {
+		hue = hubiat_map_hsl.hue*3.6
+	}
+	hue_s = String.format("%04x", (hue).toBigInteger())
+
+	// sat
+	if (sat == null) {
+		log.warn "SAT: " + hubiat_map_hsl.saturation*10
+		sat = hubiat_map_hsl.saturation*10
+	}
+	sat_s = String.format("%04x", sat.toBigInteger())
+
+	// val
+	if (val == null) {
+		val = hubiat_map_hsl.level*10
+	}
+	val_s = String.format("%04x", val.toBigInteger())
+
+	// colortemp
+	if (level == null) {
+		level = (device.currentValue("whiteLevel")-1)*10
+	}
+	level_s = String.format("%04x", level.toBigInteger())
+
+	// colortemp
+	if (colortemp == null) {
+		colortemp = (device.currentValue("colorTemperature")/3.8)- (2700/3.8)
+	}
+	colortemp_s = String.format("%04x", colortemp.toBigInteger())
+
+	tmp = "1" + hue_s + sat_s + val_s + level_s + colortemp_s
+
+	log.debug "Command str: " + tmp
+	log.debug "Hue: $hue, Sat: $sat, Val: $val"
+
+	return tmp
+}
+
 
 //colormap required (COLOR_MAP) - Color map settings [hue*:(0 to 100), saturation*:(0 to 100), level:(0 to 100)]
 def setColor(colormap) {
@@ -170,7 +228,12 @@ def setColor(colormap) {
 
 	setMap[24] = setting
 
-	//send(generate_payload("set", setMap))
+	if (useDP28MultiControl == true) {
+		setMap = [:]
+
+		setMap[28] = handleDP28DualMode(hue=bHue,  sat=bSat, val=bValue, null, null)
+		log.warn "This is the setmap: " + setMap[28]
+	}
 
 	statePayload += setMap
 	runInMillis(250, 'sendSetMessage')
@@ -366,6 +429,8 @@ def parse(String message) {
 		// Brightness
 		if (status_object.dps.containsKey("22")) {
 			sendEvent(name: "presetLevel", value : status_object.dps["22"]/10)
+			sendEvent(name: "whiteLevel", value : status_object.dps["22"]/10)
+
 			sendEvent(name: "level", value : status_object.dps["22"]/10)
 		}
 
@@ -379,6 +444,7 @@ def parse(String message) {
 
 		// Color information
 		if (status_object.dps.containsKey("24")) {
+			log.debug "We are here!"
 			// Hue
 			def hueStr = status_object.dps["24"].substring(0,4)
 			Float hue_fl = Integer.parseInt(hueStr, 16)/3.6
@@ -419,7 +485,7 @@ def hslToHsv(hue, saturation, level)
 
 	//*v = (ll + ss) / 2;
 
-	def sat = (2 * saturation) / (level + saturation)
+	def sat = (saturation==0 ? 0 : (2 * saturation) / (level + saturation))
 	//*s = (2 * ss) / (ll + ss);
 
 	def retMap = ["hue": hue, "saturation": (sat*100).intValue(), "value": (value*100).intValue()]
@@ -440,7 +506,7 @@ def hsvToHsl(hue, saturation, value)
 	def sat = (saturation/100) * (value/100)
 	//*ss = s * v;
 
-	if (level != 0) {
+	if (level != 0 && level != 2) {
 		sat = sat / ((level <= 1) ? level : 2 - level)
 		//*ss /= (*ll < = 1) ? (*ll) : 2 - (*ll);
 	}
