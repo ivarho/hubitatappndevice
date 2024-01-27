@@ -141,7 +141,7 @@ def setColorTemperature(colortemperature, level=null, transitionTime=null) {
 		setMap = [:]
 
 		setMap[28] = handleDP28DualMode(null, null, null, colortemp = bulb_ct_setting,  level = (level*10).toBigInteger())
-		log.warn "This is the setmap: " + setMap[28]
+		if(logEnable) log.warn "This is the setmap: " + setMap[28]
 	}
 
 	statePayload += setMap
@@ -193,8 +193,8 @@ def handleDP28DualMode(BigInteger hue=null, BigInteger sat=null, BigInteger val=
 
 	tmp = "1" + hue_s + sat_s + val_s + level_s + colortemp_s
 
-	log.debug "Command str: " + tmp
-	log.debug "Hue: $hue, Sat: $sat, Val: $val, Level: $level, Color temp: $colortemp"
+	if(logEnable) log.debug "Command str: " + tmp
+	if(logEnable) log.debug "Hue: $hue, Sat: $sat, Val: $val, Level: $level, Color temp: $colortemp"
 
 	sendEvent(name: "hue", value: hue/3.6)
 	sendEvent(name: "saturation", value: sat/10)
@@ -240,7 +240,7 @@ def setColor(colormap) {
 		setMap = [:]
 
 		setMap[28] = handleDP28DualMode(hue=bHue,  sat=bSat, val=bValue, null, null)
-		log.warn "This is the setmap: " + setMap[28]
+		if(logEnable) log.warn "This is the setmap: " + setMap[28]
 	}
 
 	statePayload += setMap
@@ -268,7 +268,7 @@ def presetLevel(level) {
 			setMap = [:]
 
 			setMap[28] = handleDP28DualMode(null, null, null, null,  level = (level*10).toBigInteger())
-			log.warn "This is the setmap: " + setMap[28]
+			if(logEnable) log.warn "This is the setmap: " + setMap[28]
 			sendEvent(name: "level", value: level/10)
 		} else {
 			if (level <= 0) level = 1
