@@ -54,7 +54,7 @@ preferences {
 		input name: "poll_interval", type: "enum", title: "Configure poll interval:", options: [0: "No polling", 1:"Every 1 second", 2:"Every 2 second", 3: "Every 3 second", 5: "Every 5 second", 10: "Every 10 second", 15: "Every 15 second", 20: "Every 20 second", 30: "Every 30 second", 60: "Every 1 min", 120: "Every 2 min", 180: "Every 3 min"], description: "<small>Old way of reading status of the deivce. Use \"No polling\" when auto reconnect or heart beat is enabled.</small>"
 		input name: "autoReconnect", type: "bool", title: "Auto reconnect on socket close", defaultValue: true, description: "<small>A communication channel is kept open between HE and the tuya device. Every 30 s the socket is closed and re-opened. This is useful if the device is a switch, or is also being controlled from external apps like Smart Life etc. For <b>3.4</b> devices see the Use heart beat method instead in combination with this one.</small>"
 		input name: "heartBeatMethod", type: "bool", title: "Use heart beat method to keep connection alive", defaultValue: false, description: "<small>Use a heart beat to keep the connection alive, i.e. a message is sent every 20 seconds to the device, the causes less data traffic on <b>3.4</b> devices as sessions don't have to be negotiated all the time.</small>"
-		input name: "useDP28MultiControl" , type: "bool", title: "Use DP 28 which allows for controlling both the white and color mode at the same time", defaultValue: false, description: "<small>Enable this to control both the R G B and W LED output of the bulb, for multi color devices, or just making special color mixing.<hr><br><b>WARNING!</b> Bulb does not respond back with its current state, i.e. this is a hub to bulb only communication. Dashboard tiles etc. will not react correctly.</small>"
+		input name: "useDP28MultiControl" , type: "bool", title: "Use DP 28 which allows for controlling both the white and color mode at the same time", defaultValue: false, description: "<small>Enable this to control both the R G B and W LED output of the bulb, for multi color devices, or just making special color mixing.<hr><br><b>WARNING!</b> Hubitat reuses the same event to store the color level/value component, and light dim level component, hence dashboard controls behaves a bit strange.</small>"
 	}
 	section("Other") {
 		input name: "color_mode", type: "enum", title: "Configure bulb color mode:", defaultValue: "hsv", options: ["hsv": "HSV (native Hubitat)", "hsl": "HSL"]
@@ -179,7 +179,7 @@ def handleDP28DualMode(BigInteger hue=null, BigInteger sat=null, BigInteger val=
 
 	// colortemp
 	if (level == null) {
-		level = (device.currentValue("whiteLevel")-1)*10
+		level = (device.currentValue("whiteLevel"))*10
 	}
 	level_s = String.format("%04x", level.toBigInteger())
 
@@ -192,7 +192,13 @@ def handleDP28DualMode(BigInteger hue=null, BigInteger sat=null, BigInteger val=
 	tmp = "1" + hue_s + sat_s + val_s + level_s + colortemp_s
 
 	log.debug "Command str: " + tmp
-	log.debug "Hue: $hue, Sat: $sat, Val: $val"
+	log.debug "Hue: $hue, Sat: $sat, Val: $val, Level: $level, Color temp: $colortemp"
+
+	sendEvent(name: "hue", value: hue/3.6)
+	sendEvent(name: "saturation", value: sat/10)
+	sendEvent(name: "level", value: val/10)
+	sendEvent(name: "colorTemperature", value: (colortemp + (2700/3.8))*3.8)
+	sendEvent(name: "whiteLevel", value: level/10)
 
 	return tmp
 }
@@ -255,9 +261,17 @@ def presetLevel(level) {
 
 	if (level != null) {
 		if (level > 100) level = 100
-		if (level <= 0) level = 1
 
-		setMap[22] = level*10
+		if (useDP28MultiControl == true) {
+			setMap = [:]
+
+			setMap[28] = handleDP28DualMode(null, null, null, null,  level = (level*10).toBigInteger())
+			log.warn "This is the setmap: " + setMap[28]
+			sendEvent(name: "level", value: level/10)
+		} else {
+			if (level <= 0) level = 1
+			setMap[22] = level*10
+		}
 
 		//send(generate_payload("set", setMap))
 		statePayload += setMap
