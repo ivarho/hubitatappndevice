@@ -129,6 +129,8 @@ def setColorTemperature(colortemperature, level=null, transitionTime=null) {
 		if (level <= 0 && useDP28MultiControl == false) level = 1
 
 		setMap[22] = level*10
+	} else {
+		level = device.currentValue("whiteLevel")
 	}
 
 	/* Not implemented, bulb does not support this
