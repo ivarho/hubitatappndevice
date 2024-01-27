@@ -149,31 +149,33 @@ def setColorTemperature(colortemperature, level=null, transitionTime=null) {
 	runInMillis(250, 'sendSetMessage')
 }
 
+@Field static Map color_map_dp28 = [:]
+
 def handleDP28DualMode(BigInteger hue=null, BigInteger sat=null, BigInteger val=null, BigInteger colortemp=null, BigInteger level=null)
 {
 	String hue_s, sat_s, val_s, colortemp_s, level_s
 
-	//def hubiat_map_hsl = hsvToHsl(device.currentValue("hue"), device.currentValue("saturation"), device.currentValue("level"))
-	def hubiat_map_hsl = ["hue":device.currentValue("hue"), "saturation":device.currentValue("saturation"), "level":device.currentValue("level")]
-
-	log.debug hubiat_map_hsl
-
 	// hue
 	if (hue == null) {
-		hue = hubiat_map_hsl.hue*3.6
+		hue = color_map_dp28['hue']*3.6
+	} else {
+		color_map_dp28['hue'] = hue/3.6
 	}
 	hue_s = String.format("%04x", (hue).toBigInteger())
 
 	// sat
 	if (sat == null) {
-		log.warn "SAT: " + hubiat_map_hsl.saturation*10
-		sat = hubiat_map_hsl.saturation*10
+		sat = color_map_dp28['sat']*10
+	} else {
+		color_map_dp28['sat'] = sat/10
 	}
 	sat_s = String.format("%04x", sat.toBigInteger())
 
 	// val
 	if (val == null) {
-		val = hubiat_map_hsl.level*10
+		val = color_map_dp28['val']*10
+	} else {
+		color_map_dp28['val'] = val/10
 	}
 	val_s = String.format("%04x", val.toBigInteger())
 
