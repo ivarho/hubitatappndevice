@@ -124,9 +124,9 @@ def setColorTemperature(colortemperature, level=null, transitionTime=null) {
 	setMap[23] = bulb_ct_setting
 
 	// Level 0 is not allowed accoring to the tuya standard, except when using DP28
-	if (level != null || level != 0) {
+	if (level != null) {
 		if (level > 100) level = 100
-		if (level < 0) level = 1
+		if (level <= 0 && useDP28MultiControl == false) level = 1
 
 		setMap[22] = level*10
 	}
@@ -460,7 +460,6 @@ def parse(String message) {
 
 		// Color information
 		if (status_object.dps.containsKey("24")) {
-			log.debug "We are here!"
 			// Hue
 			def hueStr = status_object.dps["24"].substring(0,4)
 			Float hue_fl = Integer.parseInt(hueStr, 16)/3.6
