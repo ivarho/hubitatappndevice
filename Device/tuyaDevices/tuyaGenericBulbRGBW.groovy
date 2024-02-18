@@ -606,9 +606,7 @@ Short getNewMessageSequence() {
 }
 
 byte[] getRealLocalKey() {
-	if (staticLocalKey == null) {
-		staticLocalKey = localKey.replaceAll('&lt;', '<').getBytes("UTF-8")
-	}
+	staticLocalKey = localKey.replaceAll('&lt;', '<').getBytes("UTF-8")
 
 	return staticLocalKey
 }
