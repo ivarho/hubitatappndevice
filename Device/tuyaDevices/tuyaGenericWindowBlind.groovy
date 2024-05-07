@@ -151,19 +151,19 @@ import hubitat.device.HubAction
 import hubitat.device.Protocol
 import groovy.transform.Field
 
-@Field static Map statePayload = [:] // For the driver to use to queue up messages
+//@Field static Map state.statePayload = [:] // For the driver to use to queue up messages
 
 // Session
-@Field static String staticSession_step // = state.session_step
-@Field static byte[] staticSessionKey // = state.sessionKey
-@Field static String staticLocalNonce // = state.localNonce
+//@Field static String staticSession_step // = state.session_step
+//@Field static byte[] staticSessionKey // = state.sessionKey
+//@Field static String state.LocalNonce // = state.localNonce
 
-@Field static byte[] staticLocalKey
+//@Field static byte[] staticLocalKey
 
 // Program flow
-@Field static Integer staticRetry // = state.retry
-@Field static boolean staticHaveSession = false // = state.haveSession
-@Field static Short staticMsgseq = 1 // = state.msgseq
+//@Field static Integer staticRetry // = state.retry
+//@Field static boolean state.HaveSession = false // = state.haveSession
+//@Field static Short state.Msgseq = 1 // = state.msgseq
 
 // Callback function used by HE to notify about socket changes
 // This has been reported to be buggy
@@ -180,9 +180,9 @@ def socketStatus(String socketMessage) {
 		socket_close(settings.autoReconnect == true)
 
 		if (settings.autoReconnect == true || settings.autoReconnect == null) {
-			staticHaveSession = get_session(settings.tuyaProtVersion)
+			state.HaveSession = get_session(settings.tuyaProtVersion)
 
-			if (staticHaveSession == false) {
+			if (state.HaveSession == false) {
 				sendEvent(name: "presence", value: "not present")
 			}
 		}
@@ -235,7 +235,7 @@ def socket_close(boolean willTryToReconnect=false) {
 	}
 
 	state.session_step = "step1"
-	staticHaveSession = false
+	state.HaveSession = false
 	state.sessionKey = null
 
 	try {
@@ -250,7 +250,7 @@ def socket_close(boolean willTryToReconnect=false) {
 
 def send(String command, Map message=null) {
 
-	boolean sessionState = staticHaveSession
+	boolean sessionState = state.HaveSession
 
 	if (sessionState == false) {
 		if(logEnable) log.debug "No session, creating new session"
@@ -264,7 +264,7 @@ def send(String command, Map message=null) {
 	fCommand = command
 	fMessage = message
 
-	staticHaveSession = sessionState
+	state.HaveSession = sessionState
 
 	runInMillis(1000, sendTimeout)
 }
@@ -287,25 +287,24 @@ def sendTimeout() {
 }
 
 Short getNewMessageSequence() {
-	if (staticMsgseq == null) staticMsgseq = 0
-	staticMsgseq = staticMsgseq + 1
-	return staticMsgseq
+	if (state.Msgseq == null) state.Msgseq = 0
+	state.Msgseq = state.Msgseq + 1
+	return state.Msgseq
 }
 
 byte[] getRealLocalKey() {
-	if (staticLocalKey == null) {
-		staticLocalKey = localKey.replaceAll('&lt;', '<').getBytes("UTF-8")
-	}
+	byte[] staticLocalKey = localKey.replaceAll('&lt;', '<').getBytes("UTF-8")
 
 	return staticLocalKey
 }
 
 
 def _updatedTuya() {
-	statePayload = [:]
-	staticHaveSession = false
+	state.statePayload = [:]
+	state.HaveSession = false
 	state.session_step = "step1"
 	state.retry = 5
+	state.Msgseq = 1
 }
 
 def DriverSelfTestReport(testName, byte[] generated, String expected) {
@@ -353,7 +352,7 @@ def DriverSelfTest() {
 
 	state.clear()
 	// Need to make sure to have this variable
-	statePayload = [:]
+	state.statePayload = [:]
 
 	// Testing 3.1 set message
 	expected = "000055AA0000000000000007000000B3332E313365666533353337353164353333323070306A6A4A75744C704839416F324B566F76424E55492B4A78527649334E5833305039794D594A6E33703842704B456A737767354C332B7849343638314B5277434F484C366B374B3543375A362F58766D6A7665714446736F714E31792B31584A53707542766D5A4337567371644944336A386A393354387944526154664A45486150516E784C394844625948754A63634A636E33773D3D1A3578640000AA55"
@@ -603,7 +602,7 @@ Map decodeIncomingFrame(byte[] incomingData, Integer sofIndex=0, byte[] testKey=
 
 			state.sessionKey = calculateSessionKey(remoteNonce)
 			state.session_step = "final"
-			staticHaveSession = true
+			state.HaveSession = true
 
 			sendEvent(name: "presence", value: "present")
 
@@ -945,10 +944,10 @@ def generateLocalNonce(Integer length=16) {
 }
 
 String getLocalNonce() {
-	if (staticLocalNonce == null) {
-		staticLocalNonce = generateLocalNonce()
+	if (state.LocalNonce == null) {
+		state.LocalNonce = generateLocalNonce()
 	}
-	return staticLocalNonce
+	return state.LocalNonce
 }
 
 byte[] generateKeyStartMessage(String useLocalNonce=null, byte[] useKey=getRealLocalKey(), Short useMsgSequence=null) {
