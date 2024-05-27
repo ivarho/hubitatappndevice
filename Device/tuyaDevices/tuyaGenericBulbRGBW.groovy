@@ -48,11 +48,12 @@ preferences {
 		input "ipaddress", "text", title: "Device IP:", required: true, description: "<small>tuya device local IP address. Found by using tools like tinytuya. Tip: configure a fixed IP address for your tuya device on your network to make sure the IP does not change over time.</small>"
 		input "devId", "text", title: "Device ID:", required: true, description: "<small>Unique tuya device ID. Found by using tools like tinytuya.</small>"
 		input "localKey", "text", title: "Device local key:", required: true, description: "<small>The local key used  for encrypted communication between HE and the tuya Deivce. Found by using tools like tinytuya.</small>"
-		input name: "logEnable", type: "bool", title: "Enable debug logging", defaultValue: true, description: "<small>If issues are experienced it might help to turn on debug logging and see the debug logs, automatically turned off after 30 min. Check device IP, ID and local key make sure they are correct. Also a power off/on on the tuya device might help.</small>"
-		input "tuyaProtVersion", "enum", title: "Select tuya protocol version: ", required: true, options: [31: "3.1", 33 : "3.3", 34: "3.4"], description: "<small>Select the correct protocol version corresponding to your device. If you run firmware update on the device you should expect the driver protocol version to update. Which protocol is used can be found using tools like tinytuya.</small>"
-		input name: "poll_interval", type: "enum", title: "Configure poll interval:", options: [0: "No polling", 1:"Every 1 second", 2:"Every 2 second", 3: "Every 3 second", 5: "Every 5 second", 10: "Every 10 second", 15: "Every 15 second", 20: "Every 20 second", 30: "Every 30 second", 60: "Every 1 min", 120: "Every 2 min", 180: "Every 3 min"], description: "<small>Old way of reading status of the deivce. Use \"No polling\" when auto reconnect or heart beat is enabled.</small>"
-		input name: "autoReconnect", type: "bool", title: "Auto reconnect on socket close", defaultValue: true, description: "<small>A communication channel is kept open between HE and the tuya device. Every 30 s the socket is closed and re-opened. This is useful if the device is a switch, or is also being controlled from external apps like Smart Life etc. For <b>3.4</b> devices see the Use heart beat method instead.</small>"
-		input name: "heartBeatMethod", type: "bool", title: "Use heart beat method to keep connection alive", defaultValue: false, description: "<small>Use a heart beat to keep the connection alive, i.e. a message is sent every 20 seconds to the device, the causes less data traffic on <b>3.4</b> devices as sessions don't have to be negotiated all the time.</small>"
+		input name: "logEnable", type: "bool", title: "Enable <u>debug</u> logging", defaultValue: true, description: "<small>If issues are experienced it might help to turn on debug logging and see the debug logs, automatically turned off after 30 min. Check device IP, ID and local key make sure they are correct. Also a power off/on on the tuya device might help.</small>"
+		input name: "logTrace", type: "bool", title: "Enable driver level <u>trace</u> logging", defaultValue: true, description: "<small>For debugging scenes and automations it could be helpful to follow the program flow to make sure the correct functions are called. (Auto disabled after 30 min)</small>"
+		input "tuyaProtVersion", "enum", title: "Select tuya protocol version: ", required: true, defaultValue: 34, options: [31: "3.1", 33 : "3.3", 34: "3.4"], description: "<small>Select the correct protocol version corresponding to your device. If you run firmware update on the device you should expect the driver protocol version to update. Which protocol is used can be found using tools like tinytuya.</small>"
+		input name: "poll_interval", type: "enum", title: "Configure poll interval:", defaultValue: 0, options: [0: "No polling", 1:"Every 1 second", 2:"Every 2 second", 3: "Every 3 second", 5: "Every 5 second", 10: "Every 10 second", 15: "Every 15 second", 20: "Every 20 second", 30: "Every 30 second", 60: "Every 1 min", 120: "Every 2 min", 180: "Every 3 min"], description: "<small>Old way of reading status of the deivce. Use \"No polling\" when auto reconnect or heart beat is enabled.</small>"
+		input name: "autoReconnect", type: "bool", title: "Auto reconnect on socket close", defaultValue: true, description: "<small>A communication channel is kept open between HE and the tuya device. Every 30 s the socket is closed and re-opened. This is useful if the device is a switch, or is also being controlled from external apps like Smart Life etc. For <b>3.4</b> it is also smart to enable the Use heart beat method to reduce data traffic.</small>"
+		input name: "heartBeatMethod", type: "bool", title: "Use heart beat method to keep connection alive", defaultValue: true, description: "<small>Use a heart beat to keep the connection alive, i.e. a message is sent every 20 seconds to the device, the causes less data traffic on <b>3.4</b> devices as sessions don't have to be negotiated all the time.</small>"
 	}
 	section("Other") {
 		input name: "color_mode", type: "enum", title: "Configure bulb color mode:", defaultValue: "hsv", options: ["hsv": "HSV (native Hubitat)", "hsl": "HSL"]
@@ -60,8 +61,9 @@ preferences {
 }
 
 def logsOff() {
-	log.warn "debug logging disabled..."
+	log.warn "debug and trace logging disabled..."
 	device.updateSetting("logEnable", [value: "false", type: "bool"])
+	device.updateSetting("logTrace", [value: "false", type: "bool"])
 }
 
 def installed() {
@@ -73,6 +75,7 @@ def updated() {
 	log.warn "debug logging is: ${logEnable == true}"
 	state.clear()
 	if (logEnable) runIn(1800, logsOff)
+	if (logTrace) runIn(1800, logsOff)
 
 	_updatedTuya()
 
@@ -104,7 +107,7 @@ def updated() {
 level optional (NUMBER) - level to set
 transitionTime optional (NUMBER) - transition time to use in seconds*/
 def setColorTemperature(colortemperature, level=null, transitionTime=null) {
-
+	if (logTrace) log.trace("setColorTemperature($colortemperature, $level, $transitionTime)")
 	def setMap = [:]
 
 	// 0 - 1000 | 2700 - 6500
@@ -128,6 +131,12 @@ def setColorTemperature(colortemperature, level=null, transitionTime=null) {
 		setMap[22] = level*10
 	}
 
+	if (level == 0) {
+		off()
+	} else {
+		on()
+	}
+
 	/* Not implemented, bulb does not support this
 	if (transitionTime != null) {
 		setMap[26] = transitionTime
@@ -142,6 +151,8 @@ def setColorTemperature(colortemperature, level=null, transitionTime=null) {
 
 //colormap required (COLOR_MAP) - Color map settings [hue*:(0 to 100), saturation*:(0 to 100), level:(0 to 100)]
 def setColor(colormap) {
+	if (logTrace) log.trace("setColor($colormap)")
+
 	def setMap = [:]
 
 	setMap[21] = "colour"
@@ -170,6 +181,12 @@ def setColor(colormap) {
 
 	setMap[24] = setting
 
+	if (bHue == 0 && bSat == 0 && bValue == 0) {
+		off()
+	} else {
+		on()
+	}
+
 	//send(generate_payload("set", setMap))
 
 	state.statePayload += setMap
@@ -179,15 +196,19 @@ def setColor(colormap) {
 
 //hue required (NUMBER) - Color Hue (0 to 100)
 def setHue(hue) {
+	if (logTrace) log.trace("setHue($hue) - NOT IMPLEMENTED!")
 	// Not implemented
 }
 
 //saturation required (NUMBER) - Color Saturation (0 to 100)
 def setSaturation(saturation) {
+	if (logTrace) log.trace("setSaturation($saturation) - NOT IMPLEMENTED!")
 	// Not implemented
 }
 
 def presetLevel(level) {
+	if (logTrace) log.trace("presetLevel($level)")
+
 	def setMap = [:]
 
 	if (level != null) {
@@ -195,6 +216,8 @@ def presetLevel(level) {
 		if (level <= 0) level = 1
 
 		setMap[22] = level*10
+
+		on()
 
 		//send(generate_payload("set", setMap))
 		state.statePayload += setMap
@@ -205,10 +228,14 @@ def presetLevel(level) {
 }
 
 def setLevel(level, duration=null) {
+	if (logTrace) log.trace("setLevel($level, $duration)")
+
 	presetLevel(level)
 }
 
 def setEffect(effectnumber) {
+	if (logTrace) log.trace("setEffect($effectnumber)")
+
 	state.effectnumber = effectnumber.intValue()
 
 	// Thanks to neerav.modi on the Hubitat forum for suggesting this feature and the scene information
@@ -252,11 +279,15 @@ def setEffect(effectnumber) {
 
 	setMap[25] = lightEffects[effectnumber.intValue()]
 
+	on()
+
 	state.statePayload += setMap
 	runInMillis(250, 'sendSetMessage')
 }
 
 def setNextEffect() {
+	if (logTrace) log.trace("setNextEffect()")
+
 	def temp = state.effectnumber
 
 	if (temp == null) {
@@ -273,6 +304,8 @@ def setNextEffect() {
 }
 
 def setPreviousEffect() {
+	if (logTrace) log.trace("setPreviousEffect()")
+
 	def temp = state.effectnumber
 
 	if (temp == null) {
@@ -289,10 +322,14 @@ def setPreviousEffect() {
 }
 
 def refresh() {
+	if (logTrace) log.trace("refresh()")
+
 	status()
 }
 
 def on() {
+	if (logTrace) log.trace("on()")
+
 	//send(generate_payload("set", [20:true]))
 
 	state.statePayload[20] = true
@@ -300,12 +337,15 @@ def on() {
 }
 
 def off() {
+	if (logTrace) log.trace("off()")
+
 	//send(generate_payload("set", [20:false]))
 	state.statePayload[20] = false
 	runInMillis(250, 'sendSetMessage')
 }
 
 def SendCustomDataToDevice(endpoint, data) {
+	if (logTrace) log.trace("SendCustomDataToDevice($endpoint, $data)")
 
 	// A fix for a common use-case where true and false is sent
 	// these values must be converted to boolean values to work
@@ -320,6 +360,8 @@ def SendCustomDataToDevice(endpoint, data) {
 
 def SendCustomJSONObject(String _s_json_data)
 {
+	if (logTrace) log.trace("SendCustomJSONObject($_s_json_data)")
+
 	status = [:]
 
 	def jsonSlurper = new groovy.json.JsonSlurper()
@@ -329,16 +371,20 @@ def SendCustomJSONObject(String _s_json_data)
 }
 
 def sendSetMessage() {
+	if (logTrace) log.trace("sendSetMessage() // current state.statePayload = $state.statePayload)")
 
 	send("set", state.statePayload)
 	state.statePayload = [:]
 }
 
 def status() {
+	if (logTrace) log.trace("status()")
+
 	send("status", [:])
 }
 
 def parse(String message) {
+	if (logTrace) log.trace("parse()")
 
 	List results = _parseTuya(message)
 
