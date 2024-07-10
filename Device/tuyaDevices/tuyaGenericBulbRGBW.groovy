@@ -653,7 +653,10 @@ Short getNewMessageSequence() {
 
 byte[] getRealLocalKey() {
 	byte[] staticLocalKey = localKey.replaceAll('&lt;', '<').getBytes("UTF-8")
-
+	
+	// Update the setting in case < got replaced in the original input
+	device.updateSetting("localKey", [value: localKey.replaceAll('&lt;', '<'), type: "text"])
+	
 	return staticLocalKey
 }
 
